@@ -18,6 +18,7 @@ Open `http://localhost:3000`.
 The prototype uses SQLite locally through Prisma. The schema is designed to move to Postgres by changing the Prisma datasource provider and `DATABASE_URL`.
 
 `npm run db:push` attempts Prisma `db push` first and falls back to a local SQLite initializer if the Prisma schema engine is unavailable on the machine.
+On first app load, `/api/bootstrap` also creates the default MVP seed data when the database is empty. If the backend is unavailable, the client renders a read-only demo dashboard with a warning instead of remaining on the loading screen.
 
 ## AI Configuration
 

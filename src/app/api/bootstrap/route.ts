@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { ensureDefaultSeed } from "@/lib/default-seed";
 
 export async function GET() {
+  await ensureDefaultSeed(prisma);
+
   const [users, domain] = await Promise.all([
     prisma.user.findMany({ orderBy: { created_at: "asc" } }),
     prisma.domain.findFirst({

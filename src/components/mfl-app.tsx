@@ -221,6 +221,132 @@ type Bootstrap = {
   domain: Domain | null;
 };
 
+const demoConcepts: Concept[] = [
+  {
+    id: "demo-concept-auth",
+    domain_id: "demo-domain",
+    name: "Authentication",
+    description: "How an API verifies the identity of a caller.",
+    importance_score: 5,
+    difficulty_score: 2
+  },
+  {
+    id: "demo-concept-permissions",
+    domain_id: "demo-domain",
+    name: "Authorization",
+    description: "How the API decides whether an authenticated caller may perform an action.",
+    importance_score: 5,
+    difficulty_score: 3
+  },
+  {
+    id: "demo-concept-diagnosis",
+    domain_id: "demo-domain",
+    name: "Integration failure diagnosis",
+    description: "Distinguishing auth, permissions, rate limits, environment mismatch, and policy issues.",
+    importance_score: 5,
+    difficulty_score: 5
+  }
+];
+
+const demoMisconceptions: Misconception[] = [
+  {
+    id: "demo-misconception-token",
+    domain_id: "demo-domain",
+    concept_id: "demo-concept-permissions",
+    name: "Valid token means sufficient permission",
+    description: "Assumes that once a token is accepted, all requested API actions should work.",
+    typical_signals: ["valid token", "authenticated so allowed"],
+    repair_strategy: "Contrast identity verification with action authorization using same-token different-scope cases.",
+    example_wrong_answer: "The token is valid, so the issue cannot be permissions.",
+    expert_correction: "A token can authenticate identity while still lacking scopes or permissions for a specific action."
+  },
+  {
+    id: "demo-misconception-all-auth",
+    domain_id: "demo-domain",
+    concept_id: "demo-concept-diagnosis",
+    name: "All API errors are authentication errors",
+    description: "Treats failures as token problems without checking rate limits, scopes, roles, policies, or environment.",
+    typical_signals: ["refresh the token", "auth issue"],
+    repair_strategy: "Ask learners to separate symptoms and fixes across 401, 403, 429, and environment mismatch cases.",
+    example_wrong_answer: "Generate a new token and retry because API errors usually mean auth failed.",
+    expert_correction: "API failures need differential diagnosis across identity, permissions, quota, environment, and policy."
+  }
+];
+
+const demoBootstrap: Bootstrap = {
+  users: [
+    {
+      id: "demo-admin",
+      name: "Admin Researcher",
+      email: "admin@mfl.local",
+      role: "ADMIN",
+      experimental_condition: "EXPERIMENTAL"
+    },
+    {
+      id: "demo-learner",
+      name: "Avery Experimental",
+      email: "avery@mfl.local",
+      role: "LEARNER",
+      experimental_condition: "EXPERIMENTAL"
+    }
+  ],
+  domain: {
+    id: "demo-domain",
+    name: "API Authentication and Permissions",
+    description: "Technical onboarding for B2B software sales engineers learning API authentication, permissions, and integration diagnosis.",
+    target_learner: "New sales engineers, solutions engineers, customer success engineers, and technical support specialists.",
+    learner_role: "B2B software sales engineer",
+    business_goal: "Reduce time-to-proficiency by repairing misconceptions before customer-facing technical scenarios.",
+    target_performance_goal: "Correctly diagnose novel API auth and permission failures with calibrated confidence.",
+    allowed_source_material: [
+      {
+        title: "API auth onboarding source",
+        content:
+          "Authentication proves identity. Authorization determines what that identity can do. Valid tokens can still lack scopes, roles, organization policy, or user-level permission."
+      }
+    ],
+    examples: ["Valid token with insufficient scope returns a permission failure."],
+    counterexamples: ["A valid token does not imply all actions are allowed."],
+    near_miss_cases: ["403 from missing scope versus 401 from invalid credential."],
+    real_world_scenarios: ["Integration works for most users but fails for a subset after role changes."],
+    transfer_scenarios: ["Customer says integration worked yesterday but now fails for only one subset of users."],
+    scoring_rubrics: {
+      explanation_quality: "0 no meaningful explanation; 5 clear causal transferable explanation",
+      transfer: "0 cannot apply; 5 adapts flexibly and explains limits"
+    },
+    expert_explanations: ["Separate identity, permission, environment, quota, and organization policy before recommending a fix."],
+    concepts: demoConcepts,
+    misconceptions: demoMisconceptions,
+    assessmentItems: [
+      {
+        id: "demo-item-auth",
+        domain_id: "demo-domain",
+        concept_id: "demo-concept-permissions",
+        item_type: "explain",
+        prompt: "In your own words, explain the difference between authentication and authorization for an API request.",
+        correct_answer: "Authentication verifies identity. Authorization determines whether that identity can perform the action.",
+        scoring_rubric: {},
+        target_misconceptions: ["demo-misconception-token"],
+        difficulty: 2,
+        transfer_distance: 1
+      },
+      {
+        id: "demo-item-transfer",
+        domain_id: "demo-domain",
+        concept_id: "demo-concept-diagnosis",
+        item_type: "transfer",
+        prompt:
+          "A customer says their integration worked yesterday but now fails for only one subset of users. What would you check first and why?",
+        correct_answer: "Check user role changes, org policy, audit logs, token validity, scopes, environment, and rate-limit signals.",
+        scoring_rubric: {},
+        target_misconceptions: ["demo-misconception-all-auth"],
+        difficulty: 5,
+        transfer_distance: 5
+      }
+    ]
+  }
+};
+
 function BookLogo() {
   return (
     <svg viewBox="0 0 36 36" aria-hidden="true">
@@ -411,30 +537,63 @@ export function MflApp() {
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [research, setResearch] = useState<Research | null>(null);
+  const [demoMode, setDemoMode] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>("");
 
   async function loadBootstrap() {
-    const response = await fetch("/api/bootstrap");
-    const data = (await response.json()) as Bootstrap;
-    setBootstrap(data);
-    setCurrentUserId((existing) => existing || data.users.find((user) => user.role === "LEARNER")?.id || data.users[0]?.id || "");
+    try {
+      const response = await fetch("/api/bootstrap");
+      if (!response.ok) {
+        throw new Error(`Bootstrap failed with ${response.status}`);
+      }
+      const data = (await response.json()) as Bootstrap;
+      if (!data.domain || data.users.length === 0) {
+        throw new Error("Bootstrap returned no domain or users");
+      }
+      setDemoMode(false);
+      setError("");
+      setBootstrap(data);
+      setCurrentUserId(
+        (existing) => existing || data.users.find((user) => user.role === "LEARNER")?.id || data.users[0]?.id || ""
+      );
+      return data;
+    } catch (err) {
+      setDemoMode(true);
+      setBootstrap(demoBootstrap);
+      setDashboard(null);
+      setResearch(null);
+      setCurrentUserId((existing) => existing || demoBootstrap.users.find((user) => user.role === "LEARNER")?.id || "");
+      setError(
+        `Demo mode: backend seed data is unavailable. Configure DATABASE_URL and run migrations to enable saved learner actions. ${
+          err instanceof Error ? err.message : "Unknown bootstrap error"
+        }`
+      );
+      return demoBootstrap;
+    }
   }
 
   async function loadRuntime(userId = currentUserId, domainId = bootstrap?.domain?.id) {
+    if (demoMode) return;
     if (!userId || !domainId) return;
     const [dashboardResponse, researchResponse] = await Promise.all([
       fetch(`/api/dashboard?userId=${userId}&domainId=${domainId}`),
       fetch(`/api/research?domainId=${domainId}`)
     ]);
+    if (!dashboardResponse.ok || !researchResponse.ok) {
+      throw new Error("Runtime dashboard data could not be loaded");
+    }
     setDashboard((await dashboardResponse.json()) as Dashboard);
     setResearch((await researchResponse.json()) as Research);
   }
 
   async function refreshAll() {
     setError("");
-    await loadBootstrap();
-    await loadRuntime();
+    const data = await loadBootstrap();
+    if (data !== demoBootstrap && data.domain) {
+      const nextUserId = currentUserId || data.users.find((user) => user.role === "LEARNER")?.id || data.users[0]?.id || "";
+      await loadRuntime(nextUserId, data.domain.id);
+    }
   }
 
   useEffect(() => {
@@ -442,9 +601,10 @@ export function MflApp() {
   }, []);
 
   useEffect(() => {
+    if (demoMode) return;
     loadRuntime().catch((err: Error) => setError(err.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUserId, bootstrap?.domain?.id]);
+  }, [currentUserId, bootstrap?.domain?.id, demoMode]);
 
   const domain = bootstrap?.domain ?? null;
   const users = bootstrap?.users ?? [];

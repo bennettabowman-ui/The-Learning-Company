@@ -31,6 +31,8 @@ Delayed transfer score.
 
 ## Minimum Pilot Design
 
+Use the operational checklist in `docs/PILOT_PACKET.md` for the first human run.
+
 - Randomly assign learners to control or experimental condition. The MVP API uses balanced randomization when a learner is created without an explicit condition.
 - Use identical diagnostic, immediate transfer, and delayed transfer items.
 - Schedule delayed probes at 24 hours for fast MVP cycles. Add 3-day and 7-day probes when pilot volume allows.

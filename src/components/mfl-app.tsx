@@ -3,22 +3,33 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ComponentType } from "react";
 import {
+  Activity,
+  ArrowRight,
   BarChart3,
-  Brain,
   CalendarClock,
+  CheckCircle2,
+  Clock3,
   ClipboardList,
   Database,
   Download,
+  Flame,
+  Gem,
+  Home,
+  MessageSquare,
   Microscope,
+  NotebookPen,
   Plus,
   RefreshCw,
   Send,
   ShieldCheck,
+  Sun,
   Target,
+  Zap,
   Wrench
 } from "lucide-react";
 
 type ViewKey =
+  | "Pilot Brief"
   | "Domain Setup"
   | "Diagnostic"
   | "Repair Lab"
@@ -210,14 +221,66 @@ type Bootstrap = {
   domain: Domain | null;
 };
 
-const nav: Array<{ key: ViewKey; icon: ComponentType<{ size?: number }> }> = [
-  { key: "Domain Setup", icon: Database },
-  { key: "Diagnostic", icon: ClipboardList },
-  { key: "Repair Lab", icon: Wrench },
-  { key: "Transfer", icon: Target },
-  { key: "Retention", icon: CalendarClock },
-  { key: "Learner Mastery", icon: BarChart3 },
-  { key: "Research", icon: Microscope }
+function BookLogo() {
+  return (
+    <svg viewBox="0 0 36 36" aria-hidden="true">
+      <path d="M18 10.5C14.6 7.9 10.8 6.7 6.7 6.4v16.4c4 .3 7.8 1.6 11.3 4.1V10.5Z" fill="#35b86f" />
+      <path d="M18 10.5c3.4-2.6 7.2-3.8 11.3-4.1v16.4c-4 .3-7.8 1.6-11.3 4.1V10.5Z" fill="#64d494" />
+      <path d="M18 10.5v16.4" stroke="#168449" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+const nav: Array<{ key: ViewKey; label: string; icon: ComponentType<{ size?: number }> }> = [
+  { key: "Pilot Brief", label: "Home", icon: Home },
+  { key: "Domain Setup", label: "Domain", icon: Database },
+  { key: "Diagnostic", label: "Diagnostic", icon: ClipboardList },
+  { key: "Repair Lab", label: "Repair", icon: Wrench },
+  { key: "Transfer", label: "Transfer", icon: Target },
+  { key: "Retention", label: "Retention", icon: CalendarClock },
+  { key: "Learner Mastery", label: "Mastery", icon: BarChart3 },
+  { key: "Research", label: "Research", icon: Microscope }
+];
+
+const pilotCards = [
+  {
+    title: "Why this exists",
+    body:
+      "Complex technical onboarding fails when learners carry hidden misconceptions into customer work. The MVP makes those misconceptions visible before they become field mistakes."
+  },
+  {
+    title: "Study goal",
+    body:
+      "Test whether misconception-first Socratic repair improves delayed transfer performance compared with a standard explanation path."
+  },
+  {
+    title: "How it works",
+    body:
+      "The system collects confidence-rated reasoning, estimates misconception risk, repairs the highest-risk mental model, and tests transfer on a novel scenario."
+  },
+  {
+    title: "Expected result",
+    body:
+      "A usable pilot should produce joinable learner evidence, expert blind scores, scorer provenance, and a delayed-transfer outcome for each participant."
+  }
+];
+
+const pilotLoop = [
+  "Create learner with auto-balanced assignment",
+  "Complete diagnostic with confidence ratings",
+  "Run repair or control explanation",
+  "Score immediate transfer",
+  "Collect T+24h retention probe",
+  "Blind-score artifacts",
+  "Export CSV and inspect provenance"
+];
+
+const pilotAcceptance = [
+  "At least one learner completes diagnostic and immediate transfer",
+  "At least one delayed probe is completed",
+  "At least three artifacts receive expert blind review",
+  "Fallback-scored rows are visible and filterable",
+  "Calibration endpoint reports review counts"
 ];
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {
@@ -245,6 +308,15 @@ function score(value: number | null | undefined) {
 function metricValue(value: number | null | undefined) {
   if (value === null || value === undefined) return "n/a";
   return value.toFixed(2);
+}
+
+function average(values: number[]) {
+  if (!values.length) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function firstName(name: string) {
+  return name.trim().split(/\s+/)[0] || "learner";
 }
 
 function statusClass(value: number) {
@@ -311,8 +383,30 @@ function TopMetrics({ dashboard, research }: { dashboard: Dashboard | null; rese
   );
 }
 
+function HeaderStat({
+  icon: Icon,
+  value,
+  label,
+  tone = "green"
+}: {
+  icon: ComponentType<{ size?: number }>;
+  value: string | number;
+  label: string;
+  tone?: "green" | "blue" | "amber";
+}) {
+  return (
+    <div className={`header-stat ${tone}`}>
+      <Icon size={18} />
+      <div>
+        <strong>{value}</strong>
+        <span>{label}</span>
+      </div>
+    </div>
+  );
+}
+
 export function MflApp() {
-  const [activeView, setActiveView] = useState<ViewKey>("Diagnostic");
+  const [activeView, setActiveView] = useState<ViewKey>("Pilot Brief");
   const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
@@ -355,7 +449,12 @@ export function MflApp() {
   const domain = bootstrap?.domain ?? null;
   const users = bootstrap?.users ?? [];
   const currentUser = users.find((user) => user.id === currentUserId) ?? users[0];
-  const title = activeView === "Research" ? "Research cohort" : activeView;
+  const title =
+    activeView === "Pilot Brief"
+      ? `Good morning, ${firstName(currentUser?.name ?? "")}`
+      : activeView === "Research"
+        ? "Research cohort"
+        : activeView;
 
   if (!bootstrap || !domain || !currentUser) {
     return (
@@ -373,11 +472,11 @@ export function MflApp() {
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-mark">
-            <Brain size={21} />
+            <BookLogo />
           </div>
           <div>
-            <p className="brand-title">MFL Engine</p>
-            <p className="brand-subtitle">Evidence of Understanding</p>
+            <p className="brand-title">The Learning Company</p>
+            <p className="brand-subtitle">MFL Engine</p>
           </div>
         </div>
 
@@ -391,10 +490,26 @@ export function MflApp() {
                 onClick={() => setActiveView(item.key)}
               >
                 <Icon size={17} />
-                {item.key}
+                {item.label}
               </button>
             );
           })}
+        </div>
+
+        <div className="sidebar-card">
+          <div className="sidebar-card-icon">
+            <Flame size={18} />
+          </div>
+          <div>
+            <p className="brand-subtitle">Current pilot</p>
+            <strong>{research?.totals.evidence_events ?? 0} evidence events</strong>
+            <p className="brand-subtitle">Collect first human data</p>
+          </div>
+          <div className="week-dots" aria-label="Pilot progress markers">
+            {[0, 1, 2, 3, 4].map((item) => (
+              <span key={item} className={item < Math.min(5, research?.totals.evidence_events ?? 0) ? "active" : ""} />
+            ))}
+          </div>
         </div>
 
         <div className="user-panel">
@@ -411,21 +526,28 @@ export function MflApp() {
           <p className="brand-subtitle" style={{ marginTop: 10 }}>
             {currentUser.email}
           </p>
+          <span className={`status ${currentUser.experimental_condition === "EXPERIMENTAL" ? "green" : "amber"}`}>
+            {currentUser.experimental_condition.toLowerCase()}
+          </span>
         </div>
       </aside>
 
       <main className="main">
         <div className="topbar">
           <div>
-            <h1>{title}</h1>
+            <h1>
+              {title}
+              {activeView === "Pilot Brief" ? <Sun className="title-sun" size={27} /> : null}
+            </h1>
             <p>
-              {domain.name}: diagnose hidden misconceptions, repair them through active reasoning, and measure delayed transfer.
+              {activeView === "Pilot Brief"
+                ? "What misconception will you repair today?"
+                : `${domain.name}: diagnose hidden misconceptions, repair them through active reasoning, and measure delayed transfer.`}
             </p>
           </div>
-          <div className="toolbar">
-            <span className={`status ${currentUser.experimental_condition === "EXPERIMENTAL" ? "blue" : "amber"}`}>
-              {currentUser.experimental_condition.toLowerCase()} condition
-            </span>
+          <div className="topbar-actions">
+            <HeaderStat icon={Zap} value={research?.totals.evidence_events ?? 0} label="Evidence events" tone="amber" />
+            <HeaderStat icon={Gem} value={research?.totals.expert_reviews ?? 0} label="Expert reviews" tone="blue" />
             <button className="button" onClick={() => refreshAll()} disabled={busy}>
               <RefreshCw size={15} />
               Refresh
@@ -434,8 +556,17 @@ export function MflApp() {
         </div>
 
         {error ? <div className="feedback">{error}</div> : null}
-        <TopMetrics dashboard={dashboard} research={research} />
+        {activeView === "Pilot Brief" ? null : <TopMetrics dashboard={dashboard} research={research} />}
 
+        {activeView === "Pilot Brief" ? (
+          <PilotBrief
+            domain={domain}
+            dashboard={dashboard}
+            research={research}
+            onStartDiagnostic={() => setActiveView("Diagnostic")}
+            onOpenResearch={() => setActiveView("Research")}
+          />
+        ) : null}
         {activeView === "Domain Setup" ? (
           <DomainSetup domain={domain} onRefresh={refreshAll} busy={busy} setBusy={setBusy} />
         ) : null}
@@ -484,6 +615,350 @@ export function MflApp() {
           />
         ) : null}
       </main>
+    </div>
+  );
+}
+
+function PilotBrief({
+  domain,
+  dashboard,
+  research,
+  onStartDiagnostic,
+  onOpenResearch
+}: {
+  domain: Domain;
+  dashboard: Dashboard | null;
+  research: Research | null;
+  onStartDiagnostic: () => void;
+  onOpenResearch: () => void;
+}) {
+  const learnerCount = research?.conditions.reduce((sum, row) => sum + row.learner_count, 0) ?? 0;
+  const expertReviews = research?.totals.expert_reviews ?? 0;
+  const retentionProbes = research?.totals.retention_probes ?? 0;
+  const conceptStates = dashboard?.conceptStates ?? [];
+  const responses = dashboard?.responses ?? [];
+  const transfers = dashboard?.transfers ?? [];
+  const probes = dashboard?.probes ?? [];
+  const likelyMisconceptions = dashboard?.misconceptionStates.filter((state) => state.probability >= 0.5) ?? [];
+  const explanationPct = Math.round(average(conceptStates.map((state) => state.explanation_quality / 5)) * 100);
+  const applicationPct = Math.round(average(conceptStates.map((state) => state.application_accuracy / 5)) * 100);
+  const transferPct = Math.round(average(conceptStates.map((state) => state.transfer_score / 5)) * 100);
+  const misconceptionPct = Math.round((1 - average(conceptStates.map((state) => state.misconception_probability))) * 100);
+  const retentionPct = Math.round((1 - average(conceptStates.map((state) => state.retention_risk))) * 100);
+  const masteryPct = Math.round(average([explanationPct, applicationPct, transferPct, misconceptionPct, retentionPct]));
+  const nextPractice = dashboard?.nextRecommendedPractice ?? "Run the diagnostic to create the first evidence row.";
+  const immediateTransfer = transfers[0]?.score ?? 0;
+  const nextProbe = probes.find((probe) => !probe.completed_at) ?? probes[0];
+  const transferItem = domain.assessmentItems.find((item) => item.item_type === "transfer");
+
+  const pathCards = [
+    {
+      icon: CheckCircle2,
+      step: 1,
+      title: "Diagnostic Check",
+      status: responses.length ? "Completed" : "Ready",
+      tone: "green",
+      progress: responses.length ? 100 : 12
+    },
+    {
+      icon: MessageSquare,
+      step: 2,
+      title: "Misconception Repair",
+      status: likelyMisconceptions.length ? "In progress" : responses.length ? "Ready" : "Locked",
+      tone: "purple",
+      progress: likelyMisconceptions.length ? 42 : responses.length ? 18 : 0
+    },
+    {
+      icon: Target,
+      step: 3,
+      title: "Transfer Challenge",
+      status: transfers.length ? "Completed" : "Not started",
+      tone: "amber",
+      progress: transfers.length ? 100 : 0
+    },
+    {
+      icon: CalendarClock,
+      step: 4,
+      title: "Delayed Retention",
+      status: probes.some((probe) => probe.completed_at) ? "Completed" : probes.length ? "Scheduled" : "Locked",
+      tone: "blue",
+      progress: probes.some((probe) => probe.completed_at) ? 100 : probes.length ? 35 : 0
+    }
+  ];
+
+  const understanding = [
+    { label: "Auth Flow", value: explanationPct },
+    { label: "Permissions", value: applicationPct },
+    { label: "Error Diagnosis", value: transferPct },
+    { label: "Environments", value: retentionPct },
+    { label: "API Concepts", value: misconceptionPct }
+  ];
+
+  return (
+    <div className="home-dashboard">
+      <div className="home-main">
+        <section className="focus-card">
+          <div>
+            <span className="focus-label">Today&apos;s focus</span>
+            <h2>API Auth & Permissions</h2>
+            <p>Understand how authentication, permissions, environments, and integration failures work together.</p>
+            <div className="focus-actions">
+              <button className="button primary light" onClick={onStartDiagnostic}>
+                Continue lesson
+                <ArrowRight size={17} />
+              </button>
+              <span className="time-note">
+                <Clock3 size={15} />
+                7 min estimated
+              </span>
+            </div>
+          </div>
+          <div className="mastery-orbit">
+            <div
+              className="mastery-ring"
+              style={{
+                background: `conic-gradient(#35d17d ${masteryPct * 3.6}deg, rgba(255,255,255,0.14) 0deg)`
+              }}
+            >
+              <div>
+                <strong>{masteryPct}%</strong>
+                <span>Mastery</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="path-section">
+          <div className="section-heading-row">
+            <h2>Your learning path</h2>
+            <button className="text-link" onClick={onOpenResearch}>
+              View research <ArrowRight size={14} />
+            </button>
+          </div>
+          <div className="learning-path">
+            {pathCards.map((card) => {
+              const Icon = card.icon;
+              return (
+                <div className={`path-card ${card.tone}`} key={card.title}>
+                  <div className="path-icon">
+                    <Icon size={18} />
+                  </div>
+                  <span className="path-step">{card.step}</span>
+                  <strong>{card.title}</strong>
+                  <div className="path-progress">
+                    <span style={{ width: `${card.progress}%` }} />
+                  </div>
+                  <p>{card.status}</p>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="continue-section">
+          <h2>Continue where you left off</h2>
+          <div className="continue-grid">
+            <div className="continue-card wave-card">
+              <div>
+                <strong>Socratic Repair</strong>
+                <p>{nextPractice}</p>
+              </div>
+              <button className="text-link" onClick={onStartDiagnostic}>
+                Continue <ArrowRight size={14} />
+              </button>
+            </div>
+            <div className="continue-card">
+              <div>
+                <strong>Last Challenge</strong>
+                <p>{transferItem?.prompt ?? "Complete a novel API failure scenario after repair."}</p>
+              </div>
+              <div className="challenge-row">
+                <span>{score(immediateTransfer)}/5 transfer</span>
+                <div className="mini-terminal">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+              </div>
+              <div className="path-progress">
+                <span style={{ width: `${Math.round((immediateTransfer / 5) * 100)}%` }} />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="panel brief-panel">
+          <h2>Why, goal, method, result</h2>
+          <div className="brief-grid">
+            {pilotCards.map((card) => (
+              <div key={card.title}>
+                <strong>{card.title}</strong>
+                <p>{card.body}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+
+      <aside className="home-rail">
+        <section className="panel understanding-card">
+          <h2>Your understanding</h2>
+          <UnderstandingRadar values={understanding} />
+        </section>
+
+        <section className="panel insights-card">
+          <h2>Insights</h2>
+          <InsightRow
+            icon={Activity}
+            tone="red"
+            label="Weakest area"
+            value={likelyMisconceptions[0]?.misconception.name ?? "Run diagnostic"}
+          />
+          <InsightRow
+            icon={ArrowRight}
+            tone="green"
+            label="Next best lesson"
+            value={nextPractice}
+          />
+          <InsightRow icon={Clock3} tone="amber" label="Retention risk" value={`${100 - retentionPct}% risk`} />
+          <InsightRow icon={ShieldCheck} tone="purple" label="Expert reviews" value={`${expertReviews} submitted`} />
+        </section>
+
+        <section className="panel upcoming-card">
+          <div className="section-heading-row">
+            <h2>Upcoming review</h2>
+            <span className="brand-subtitle">{retentionProbes} probes</span>
+          </div>
+          <div className="review-list">
+            <ReviewRow
+              title={nextProbe?.concept.name ?? "Delayed retention probe"}
+              due={nextProbe ? new Date(nextProbe.scheduled_at).toLocaleDateString() : "After transfer"}
+            />
+            <ReviewRow title="Expert calibration" due={`${expertReviews} reviews`} />
+          </div>
+          <button className="text-link" onClick={onOpenResearch}>
+            View all reviews <ArrowRight size={14} />
+          </button>
+        </section>
+
+        <section className="panel pilot-mini">
+          <h2>First data point</h2>
+          <p className="brand-subtitle">
+            {learnerCount} learners assigned. Complete these checks before adding more pilot participants.
+          </p>
+          <div className="pilot-loop compact">
+            {pilotLoop.slice(0, 4).map((step, index) => (
+              <div className="flow-step" key={step}>
+                <span className="small-label">Step {index + 1}</span>
+                <strong>{step}</strong>
+              </div>
+            ))}
+          </div>
+          <div className="acceptance-list">
+            {pilotAcceptance.slice(0, 3).map((item) => (
+              <span key={item}>
+                <CheckCircle2 size={13} />
+                {item}
+              </span>
+            ))}
+          </div>
+          <p className="brand-subtitle">Full checklist: docs/PILOT_PACKET.md</p>
+        </section>
+      </aside>
+    </div>
+  );
+}
+
+function UnderstandingRadar({ values }: { values: Array<{ label: string; value: number }> }) {
+  const center = 92;
+  const radius = 58;
+  const chartPoints = values
+    .map((item, index) => {
+      const angle = (-90 + index * 72) * (Math.PI / 180);
+      const distance = Math.max(5, radius * (item.value / 100));
+      return `${center + Math.cos(angle) * distance},${center + Math.sin(angle) * distance}`;
+    })
+    .join(" ");
+  const gridRings = [0.35, 0.65, 1].map((scale) =>
+    values
+      .map((_, index) => {
+        const angle = (-90 + index * 72) * (Math.PI / 180);
+        return `${center + Math.cos(angle) * radius * scale},${center + Math.sin(angle) * radius * scale}`;
+      })
+      .join(" ")
+  );
+
+  return (
+    <div className="radar-wrap">
+      <svg className="radar-chart" viewBox="0 0 184 184" aria-label="Understanding by concept area">
+        {gridRings.map((points) => (
+          <polygon key={points} points={points} fill="none" stroke="#e5eaf2" strokeWidth="1" />
+        ))}
+        {values.map((_, index) => {
+          const angle = (-90 + index * 72) * (Math.PI / 180);
+          return (
+            <line
+              key={index}
+              x1={center}
+              y1={center}
+              x2={center + Math.cos(angle) * radius}
+              y2={center + Math.sin(angle) * radius}
+              stroke="#edf1f6"
+              strokeWidth="1"
+            />
+          );
+        })}
+        <polygon points={chartPoints} fill="rgba(53, 209, 125, 0.22)" stroke="#1fb65d" strokeWidth="2" />
+        {values.map((item, index) => {
+          const angle = (-90 + index * 72) * (Math.PI / 180);
+          const distance = Math.max(5, radius * (item.value / 100));
+          return <circle key={item.label} cx={center + Math.cos(angle) * distance} cy={center + Math.sin(angle) * distance} r="3.5" fill="#1fb65d" />;
+        })}
+      </svg>
+      <div className="radar-labels">
+        {values.map((item) => (
+          <span key={item.label}>
+            {item.label} <strong>{item.value}%</strong>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function InsightRow({
+  icon: Icon,
+  tone,
+  label,
+  value
+}: {
+  icon: ComponentType<{ size?: number }>;
+  tone: "red" | "green" | "amber" | "purple";
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="insight-row">
+      <span className={`insight-icon ${tone}`}>
+        <Icon size={17} />
+      </span>
+      <div>
+        <span>{label}</span>
+        <strong>{value}</strong>
+      </div>
+      <ArrowRight size={15} />
+    </div>
+  );
+}
+
+function ReviewRow({ title, due }: { title: string; due: string }) {
+  return (
+    <div className="review-row">
+      <span className="review-icon">
+        <NotebookPen size={15} />
+      </span>
+      <strong>{title}</strong>
+      <span>{due}</span>
     </div>
   );
 }

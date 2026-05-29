@@ -38,6 +38,7 @@ Scoring provenance is stored on each diagnostic response, transfer attempt, and 
 - Research dashboard with condition comparison and CSV export.
 - Blind expert calibration queue with agreement metrics for validating AI scores.
 - Balanced random assignment for new pilot learners when no condition is manually selected.
+- Pilot Brief intro screen and pilot packet for running the first human study.
 - AI prompt templates and deterministic fallback scoring.
 
 ## Documents
@@ -47,4 +48,5 @@ Scoring provenance is stored on each diagnostic response, transfer attempt, and 
 - [Data model](docs/DATA_MODEL.md)
 - [API routes](docs/API_ROUTES.md)
 - [Evaluation protocol](docs/EVALUATION_PROTOCOL.md)
+- [Pilot packet](docs/PILOT_PACKET.md)
 - [Implementation plan](docs/IMPLEMENTATION_PLAN.md)

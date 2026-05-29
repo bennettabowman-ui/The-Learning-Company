@@ -60,8 +60,20 @@ Returns learner concept states, misconception states, next recommended practice,
 
 Returns cohort metrics, condition comparison, misconception frequency, high-confidence error rate, transfer outcomes, and retention outcomes.
 
+`GET /api/expert-reviews?domainId=...&reviewerId=...`
+
+Returns a blind expert review queue plus recent reviews. Queue items hide learner identity, condition, AI score, and AI feedback from the review UI.
+
+`POST /api/expert-reviews`
+
+Creates or updates a blind expert review for a diagnostic response, transfer attempt, or retention probe, then logs an `expert_review_submitted` evidence event.
+
+`GET /api/calibration?domainId=...`
+
+Returns model-vs-expert agreement metrics: reviewed pairs, MAE, bias, Pearson/Spearman correlation, quadratic weighted kappa, and misconception precision/recall/F1.
+
 ## Export
 
 `GET /api/export?domainId=...`
 
-Returns CSV containing evidence events, responses, transfer attempts, and retention probes.
+Returns CSV containing evidence events, responses, transfer attempts, retention probes, and expert reviews.

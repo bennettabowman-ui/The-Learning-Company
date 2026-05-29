@@ -17,6 +17,7 @@ The schema is centered on evidence of understanding, not content consumption.
 - `TransferAttempt`: scored novel scenario attempt.
 - `RetentionProbe`: scheduled delayed probe and result.
 - `EvidenceEvent`: append-only measurement event.
+- `ExpertReview`: blind human score for a diagnostic response, transfer attempt, or retention probe used to calibrate AI scoring.
 
 ## Metric Fields
 
@@ -39,6 +40,17 @@ The schema is centered on evidence of understanding, not content consumption.
 - last detected timestamp
 - repaired timestamp
 - status
+
+`ExpertReview` stores:
+
+- blind review target type and id
+- prompt and learner response shown to the expert
+- AI score and AI misconception labels captured at review time
+- expert explanation quality score
+- expert transfer score
+- expert misconception labels
+- expert confidence calibration score
+- reviewer notes
 
 ## Schema Source
 

@@ -160,8 +160,40 @@ type Research = {
     transfers: number;
     retention_probes: number;
     evidence_events: number;
+    expert_reviews: number;
     repair_success_rate: number;
   };
+};
+
+type ExpertQueueItem = {
+  review_target_type: "learner_response" | "transfer_attempt" | "retention_probe";
+  review_target_id: string;
+  concept_id: string;
+  concept_name: string;
+  assessment_item_id?: string;
+  item_type: string;
+  prompt: string;
+  response_text: string;
+  ai_score?: number | null;
+  ai_misconception_labels: string[];
+};
+
+type CalibrationMetrics = {
+  review_count: number;
+  scored_pair_count: number;
+  mean_absolute_error: number | null;
+  bias_ai_minus_expert: number | null;
+  pearson_correlation: number | null;
+  spearman_correlation: number | null;
+  quadratic_weighted_kappa: number | null;
+  misconception_precision: number | null;
+  misconception_recall: number | null;
+  misconception_f1: number | null;
+};
+
+type CalibrationResponse = {
+  overall: CalibrationMetrics;
+  byTargetType: Array<CalibrationMetrics & { review_target_type: string }>;
 };
 
 type RepairStep = {
@@ -204,6 +236,11 @@ function pct(value: number) {
 function score(value: number | null | undefined) {
   if (value === null || value === undefined) return "0.0";
   return value.toFixed(1);
+}
+
+function metricValue(value: number | null | undefined) {
+  if (value === null || value === undefined) return "n/a";
+  return value.toFixed(2);
 }
 
 function statusClass(value: number) {
@@ -433,7 +470,14 @@ export function MflApp() {
         ) : null}
         {activeView === "Learner Mastery" ? <MasteryScreen dashboard={dashboard} /> : null}
         {activeView === "Research" ? (
-          <ResearchScreen domain={domain} research={research} onRefresh={refreshAll} busy={busy} setBusy={setBusy} />
+          <ResearchScreen
+            domain={domain}
+            user={currentUser}
+            research={research}
+            onRefresh={refreshAll}
+            busy={busy}
+            setBusy={setBusy}
+          />
         ) : null}
       </main>
     </div>
@@ -1350,12 +1394,14 @@ function MasteryScreen({ dashboard }: { dashboard: Dashboard | null }) {
 
 function ResearchScreen({
   domain,
+  user,
   research,
   onRefresh,
   busy,
   setBusy
 }: {
   domain: Domain;
+  user: User;
   research: Research | null;
   onRefresh: () => Promise<void>;
   busy: boolean;
@@ -1366,6 +1412,42 @@ function ResearchScreen({
     email: "",
     experimental_condition: "EXPERIMENTAL"
   });
+  const [reviewQueue, setReviewQueue] = useState<ExpertQueueItem[]>([]);
+  const [calibration, setCalibration] = useState<CalibrationResponse | null>(null);
+  const [selectedTargetId, setSelectedTargetId] = useState("");
+  const [expertForm, setExpertForm] = useState({
+    explanationScore: "3",
+    transferScore: "3",
+    calibrationScore: "3",
+    notes: "",
+    misconceptionLabels: [] as string[]
+  });
+
+  const selectedTarget =
+    reviewQueue.find((item) => `${item.review_target_type}:${item.review_target_id}` === selectedTargetId) ??
+    reviewQueue[0];
+
+  async function loadCalibration() {
+    const [queueResponse, calibrationResponse] = await Promise.all([
+      fetch(`/api/expert-reviews?domainId=${domain.id}&reviewerId=${user.id}`),
+      fetch(`/api/calibration?domainId=${domain.id}`)
+    ]);
+    const queueData = (await queueResponse.json()) as { queue: ExpertQueueItem[] };
+    const calibrationData = (await calibrationResponse.json()) as CalibrationResponse;
+    setReviewQueue(queueData.queue ?? []);
+    setCalibration(calibrationData);
+    if (queueData.queue?.length) {
+      setSelectedTargetId((current) => current || `${queueData.queue[0].review_target_type}:${queueData.queue[0].review_target_id}`);
+    }
+  }
+
+  useEffect(() => {
+    loadCalibration().catch(() => {
+      setReviewQueue([]);
+      setCalibration(null);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [domain.id, user.id]);
 
   async function addLearner() {
     setBusy(true);
@@ -1382,8 +1464,182 @@ function ResearchScreen({
     }
   }
 
+  function toggleMisconceptionLabel(id: string) {
+    setExpertForm((current) => ({
+      ...current,
+      misconceptionLabels: current.misconceptionLabels.includes(id)
+        ? current.misconceptionLabels.filter((label) => label !== id)
+        : [...current.misconceptionLabels, id]
+    }));
+  }
+
+  async function submitExpertReview() {
+    if (!selectedTarget) return;
+    setBusy(true);
+    try {
+      const isTransferLike =
+        selectedTarget.review_target_type === "transfer_attempt" || selectedTarget.review_target_type === "retention_probe";
+      await postJson("/api/expert-reviews", {
+        reviewer_user_id: user.id,
+        domain_id: domain.id,
+        concept_id: selectedTarget.concept_id,
+        assessment_item_id: selectedTarget.assessment_item_id,
+        review_target_type: selectedTarget.review_target_type,
+        review_target_id: selectedTarget.review_target_id,
+        prompt: selectedTarget.prompt,
+        response_text: selectedTarget.response_text,
+        ai_score: selectedTarget.ai_score ?? null,
+        ai_misconception_labels: selectedTarget.ai_misconception_labels,
+        expert_explanation_quality_score: isTransferLike ? null : Number(expertForm.explanationScore),
+        expert_transfer_score: isTransferLike ? Number(expertForm.transferScore) : null,
+        expert_confidence_calibration_score: Number(expertForm.calibrationScore),
+        expert_misconception_labels: expertForm.misconceptionLabels,
+        notes: expertForm.notes
+      });
+      setExpertForm({
+        explanationScore: "3",
+        transferScore: "3",
+        calibrationScore: "3",
+        notes: "",
+        misconceptionLabels: []
+      });
+      setSelectedTargetId("");
+      await loadCalibration();
+      await onRefresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="grid two">
+      <section className="panel">
+        <h2>Expert calibration</h2>
+        <div className="metric-row" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+          <div className="metric">
+            <span className="small-label">Reviewed pairs</span>
+            <span className="metric-value">{calibration?.overall.scored_pair_count ?? 0}</span>
+          </div>
+          <div className="metric">
+            <span className="small-label">MAE</span>
+            <span className="metric-value">{metricValue(calibration?.overall.mean_absolute_error)}</span>
+          </div>
+          <div className="metric">
+            <span className="small-label">Weighted kappa</span>
+            <span className="metric-value">{metricValue(calibration?.overall.quadratic_weighted_kappa)}</span>
+          </div>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Slice</th>
+                <th>Pairs</th>
+                <th>Pearson</th>
+                <th>Spearman</th>
+                <th>Bias</th>
+                <th>Misconception F1</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>overall</td>
+                <td>{calibration?.overall.scored_pair_count ?? 0}</td>
+                <td>{metricValue(calibration?.overall.pearson_correlation)}</td>
+                <td>{metricValue(calibration?.overall.spearman_correlation)}</td>
+                <td>{metricValue(calibration?.overall.bias_ai_minus_expert)}</td>
+                <td>{metricValue(calibration?.overall.misconception_f1)}</td>
+              </tr>
+              {(calibration?.byTargetType ?? []).map((row) => (
+                <tr key={row.review_target_type}>
+                  <td>{row.review_target_type}</td>
+                  <td>{row.scored_pair_count}</td>
+                  <td>{metricValue(row.pearson_correlation)}</td>
+                  <td>{metricValue(row.spearman_correlation)}</td>
+                  <td>{metricValue(row.bias_ai_minus_expert)}</td>
+                  <td>{metricValue(row.misconception_f1)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="panel">
+        <h2>Blind expert review queue</h2>
+        {selectedTarget ? (
+          <>
+            <SelectField
+              label="Review target"
+              value={`${selectedTarget.review_target_type}:${selectedTarget.review_target_id}`}
+              onChange={setSelectedTargetId}
+              options={reviewQueue.map((item) => ({
+                label: `${item.item_type} · ${item.concept_name}`,
+                value: `${item.review_target_type}:${item.review_target_id}`
+              }))}
+            />
+            <div className="panel compact" style={{ marginTop: 12 }}>
+              <span className="status blue">{selectedTarget.item_type}</span>
+              <p className="brand-subtitle" style={{ marginTop: 8 }}>
+                Concept: {selectedTarget.concept_name}
+              </p>
+              <p style={{ lineHeight: 1.45 }}>{selectedTarget.prompt}</p>
+              <strong>Learner response</strong>
+              <p style={{ lineHeight: 1.45 }}>{selectedTarget.response_text}</p>
+            </div>
+            <div className="form-grid" style={{ marginTop: 12 }}>
+              <TextField
+                label="Explanation quality 0-5"
+                type="number"
+                value={expertForm.explanationScore}
+                onChange={(value) => setExpertForm({ ...expertForm, explanationScore: value })}
+              />
+              <TextField
+                label="Transfer score 0-5"
+                type="number"
+                value={expertForm.transferScore}
+                onChange={(value) => setExpertForm({ ...expertForm, transferScore: value })}
+              />
+              <TextField
+                label="Confidence calibration 0-5"
+                type="number"
+                value={expertForm.calibrationScore}
+                onChange={(value) => setExpertForm({ ...expertForm, calibrationScore: value })}
+              />
+              <TextArea
+                label="Expert notes"
+                value={expertForm.notes}
+                onChange={(value) => setExpertForm({ ...expertForm, notes: value })}
+              />
+            </div>
+            <div className="field full" style={{ marginTop: 12 }}>
+              <label>Expert misconception labels</label>
+              <div className="map-list">
+                {domain.misconceptions.map((misconception) => (
+                  <label className="map-row" key={misconception.id} style={{ gridTemplateColumns: "22px minmax(0, 1fr)" }}>
+                    <input
+                      type="checkbox"
+                      checked={expertForm.misconceptionLabels.includes(misconception.id)}
+                      onChange={() => toggleMisconceptionLabel(misconception.id)}
+                    />
+                    <span>{misconception.name}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <button className="button primary" style={{ marginTop: 12 }} onClick={submitExpertReview} disabled={busy}>
+              <ShieldCheck size={15} />
+              Submit blind review
+            </button>
+            <p className="brand-subtitle" style={{ marginTop: 10 }}>
+              AI score, AI feedback, learner identity, and condition are hidden in this queue.
+            </p>
+          </>
+        ) : (
+          <div className="empty">No scored learner artifacts are waiting for expert review.</div>
+        )}
+      </section>
+
       <section className="panel">
         <h2>Condition comparison</h2>
         <div className="table-wrap">

@@ -49,6 +49,7 @@ model User {
   transferAttempts       TransferAttempt[]
   retentionProbes        RetentionProbe[]
   evidenceEvents         EvidenceEvent[]
+  expertReviewsAuthored  ExpertReview[]          @relation("ExpertReviewer")
 }
 
 model Domain {
@@ -76,6 +77,7 @@ model Domain {
   transferAttempts         TransferAttempt[]
   retentionProbes          RetentionProbe[]
   evidenceEvents           EvidenceEvent[]
+  expertReviews            ExpertReview[]
 }
 
 model Concept {
@@ -93,6 +95,7 @@ model Concept {
   interventions            Intervention[]
   retentionProbes          RetentionProbe[]
   evidenceEvents           EvidenceEvent[]
+  expertReviews            ExpertReview[]
 
   @@index([domain_id])
 }
@@ -130,6 +133,7 @@ model AssessmentItem {
   domain                   Domain                  @relation(fields: [domain_id], references: [id], onDelete: Cascade)
   concept                  Concept                 @relation(fields: [concept_id], references: [id], onDelete: Cascade)
   learnerResponses         LearnerResponse[]
+  expertReviews            ExpertReview[]
 
   @@index([domain_id])
   @@index([concept_id])
@@ -282,4 +286,33 @@ model EvidenceEvent {
 
   @@index([user_id, domain_id])
   @@index([event_type])
+}
+
+model ExpertReview {
+  id                                    String   @id @default(cuid())
+  reviewer_user_id                      String
+  domain_id                             String
+  concept_id                            String
+  assessment_item_id                    String?
+  review_target_type                    String
+  review_target_id                      String
+  prompt                                String
+  response_text                         String
+  ai_score                              Float?
+  ai_misconception_labels               Json
+  expert_explanation_quality_score      Float?
+  expert_transfer_score                 Float?
+  expert_misconception_labels           Json
+  expert_confidence_calibration_score   Float?
+  notes                                 String?
+  blind_review                          Boolean  @default(true)
+  created_at                            DateTime @default(now())
+  reviewer                              User     @relation("ExpertReviewer", fields: [reviewer_user_id], references: [id], onDelete: Cascade)
+  domain                                Domain   @relation(fields: [domain_id], references: [id], onDelete: Cascade)
+  concept                               Concept  @relation(fields: [concept_id], references: [id], onDelete: Cascade)
+  assessmentItem                        AssessmentItem? @relation(fields: [assessment_item_id], references: [id], onDelete: SetNull)
+
+  @@unique([reviewer_user_id, review_target_type, review_target_id])
+  @@index([domain_id])
+  @@index([review_target_type, review_target_id])
 }

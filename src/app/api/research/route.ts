@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "domainId is required" }, { status: 400 });
   }
 
-  const [users, responses, transfers, probes, misconceptionStates, evidence] = await Promise.all([
+  const [users, responses, transfers, probes, misconceptionStates, evidence, expertReviews] = await Promise.all([
     prisma.user.findMany({ where: { role: "LEARNER" }, orderBy: { name: "asc" } }),
     prisma.learnerResponse.findMany({
       where: { assessmentItem: { domain_id: domainId } },
@@ -26,7 +26,8 @@ export async function GET(request: Request) {
       where: { domain_id: domainId },
       include: { user: true, misconception: { include: { concept: true } } }
     }),
-    prisma.evidenceEvent.findMany({ where: { domain_id: domainId } })
+    prisma.evidenceEvent.findMany({ where: { domain_id: domainId } }),
+    prisma.expertReview.findMany({ where: { domain_id: domainId } })
   ]);
 
   const byCondition = users.map((user) => {
@@ -86,6 +87,7 @@ export async function GET(request: Request) {
       transfers: transfers.length,
       retention_probes: probes.length,
       evidence_events: evidence.length,
+      expert_reviews: expertReviews.length,
       repair_success_rate: avg(
         misconceptionStates.map((state) => (state.status === "REPAIRED" ? 1 : 0))
       )

@@ -191,6 +191,7 @@ const itemSeeds = [
 
 async function main() {
   await prisma.evidenceEvent.deleteMany();
+  await prisma.expertReview.deleteMany();
   await prisma.retentionProbe.deleteMany();
   await prisma.transferAttempt.deleteMany();
   await prisma.intervention.deleteMany();

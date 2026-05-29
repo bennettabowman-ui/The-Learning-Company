@@ -18,14 +18,18 @@ export async function GET(request: Request) {
     return new Response("domainId is required", { status: 400 });
   }
 
-  const [responses, transfers, probes, evidence] = await Promise.all([
+  const [responses, transfers, probes, evidence, expertReviews] = await Promise.all([
     prisma.learnerResponse.findMany({
       where: { assessmentItem: { domain_id: domainId } },
       include: { user: true, assessmentItem: { include: { concept: true } } }
     }),
     prisma.transferAttempt.findMany({ where: { domain_id: domainId }, include: { user: true } }),
     prisma.retentionProbe.findMany({ where: { domain_id: domainId }, include: { user: true, concept: true } }),
-    prisma.evidenceEvent.findMany({ where: { domain_id: domainId }, include: { user: true, concept: true } })
+    prisma.evidenceEvent.findMany({ where: { domain_id: domainId }, include: { user: true, concept: true } }),
+    prisma.expertReview.findMany({
+      where: { domain_id: domainId },
+      include: { reviewer: true, concept: true, assessmentItem: true }
+    })
   ]);
 
   const rows = [
@@ -88,6 +92,24 @@ export async function GET(request: Request) {
       event.id,
       event.metadata,
       event.created_at.toISOString()
+    ]),
+    ...expertReviews.map((review) => [
+      "expert_review",
+      review.reviewer.name,
+      "BLIND_EXPERT",
+      review.concept.name,
+      review.review_target_type,
+      review.expert_transfer_score ?? review.expert_explanation_quality_score ?? "",
+      "",
+      review.review_target_id,
+      {
+        ai_score: review.ai_score,
+        ai_misconception_labels: review.ai_misconception_labels,
+        expert_misconception_labels: review.expert_misconception_labels,
+        expert_confidence_calibration_score: review.expert_confidence_calibration_score,
+        notes: review.notes
+      },
+      review.created_at.toISOString()
     ])
   ];
 

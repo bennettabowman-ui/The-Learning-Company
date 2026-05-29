@@ -35,6 +35,7 @@ When `OPENAI_API_KEY` is unset or a model call fails, the app records `determini
 - Simulated delayed retention probe.
 - Learner mastery dashboard.
 - Research dashboard with condition comparison and CSV export.
+- Blind expert calibration queue with agreement metrics for validating AI scores.
 - AI prompt templates and deterministic fallback scoring.
 
 ## Documents

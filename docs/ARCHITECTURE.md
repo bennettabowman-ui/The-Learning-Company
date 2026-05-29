@@ -34,12 +34,13 @@ API routes handle:
 - Intervention logging.
 - Transfer scoring.
 - Retention probe scheduling and scoring.
+- Blind expert review queue and model-vs-expert calibration metrics.
 - Dashboard aggregation.
 - CSV export.
 
 ### Data Layer
 
-Prisma models track domain structure, learner responses, learner concept state, learner misconception state, interventions, transfer attempts, retention probes, and evidence events.
+Prisma models track domain structure, learner responses, learner concept state, learner misconception state, interventions, transfer attempts, retention probes, expert reviews, and evidence events.
 
 ### AI Layer
 

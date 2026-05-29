@@ -211,6 +211,30 @@ CREATE TABLE IF NOT EXISTS "EvidenceEvent" (
   CONSTRAINT "EvidenceEvent_domain_id_fkey" FOREIGN KEY ("domain_id") REFERENCES "Domain" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT "EvidenceEvent_concept_id_fkey" FOREIGN KEY ("concept_id") REFERENCES "Concept" ("id") ON DELETE SET NULL ON UPDATE CASCADE
 );
+CREATE TABLE IF NOT EXISTS "ExpertReview" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "reviewer_user_id" TEXT NOT NULL,
+  "domain_id" TEXT NOT NULL,
+  "concept_id" TEXT NOT NULL,
+  "assessment_item_id" TEXT,
+  "review_target_type" TEXT NOT NULL,
+  "review_target_id" TEXT NOT NULL,
+  "prompt" TEXT NOT NULL,
+  "response_text" TEXT NOT NULL,
+  "ai_score" REAL,
+  "ai_misconception_labels" JSONB NOT NULL,
+  "expert_explanation_quality_score" REAL,
+  "expert_transfer_score" REAL,
+  "expert_misconception_labels" JSONB NOT NULL,
+  "expert_confidence_calibration_score" REAL,
+  "notes" TEXT,
+  "blind_review" BOOLEAN NOT NULL DEFAULT true,
+  "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "ExpertReview_reviewer_user_id_fkey" FOREIGN KEY ("reviewer_user_id") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT "ExpertReview_domain_id_fkey" FOREIGN KEY ("domain_id") REFERENCES "Domain" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT "ExpertReview_concept_id_fkey" FOREIGN KEY ("concept_id") REFERENCES "Concept" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT "ExpertReview_assessment_item_id_fkey" FOREIGN KEY ("assessment_item_id") REFERENCES "AssessmentItem" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
 CREATE UNIQUE INDEX IF NOT EXISTS "User_email_key" ON "User"("email");
 CREATE INDEX IF NOT EXISTS "Concept_domain_id_idx" ON "Concept"("domain_id");
 CREATE INDEX IF NOT EXISTS "Misconception_domain_id_idx" ON "Misconception"("domain_id");
@@ -230,6 +254,9 @@ CREATE INDEX IF NOT EXISTS "TransferAttempt_user_id_domain_id_idx" ON "TransferA
 CREATE INDEX IF NOT EXISTS "RetentionProbe_user_id_domain_id_idx" ON "RetentionProbe"("user_id", "domain_id");
 CREATE INDEX IF NOT EXISTS "EvidenceEvent_user_id_domain_id_idx" ON "EvidenceEvent"("user_id", "domain_id");
 CREATE INDEX IF NOT EXISTS "EvidenceEvent_event_type_idx" ON "EvidenceEvent"("event_type");
+CREATE UNIQUE INDEX IF NOT EXISTS "ExpertReview_reviewer_user_id_review_target_type_review_target_id_key" ON "ExpertReview"("reviewer_user_id", "review_target_type", "review_target_id");
+CREATE INDEX IF NOT EXISTS "ExpertReview_domain_id_idx" ON "ExpertReview"("domain_id");
+CREATE INDEX IF NOT EXISTS "ExpertReview_review_target_type_review_target_id_idx" ON "ExpertReview"("review_target_type", "review_target_id");
 `);
 
 db.close();

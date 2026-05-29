@@ -1,0 +1,78 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { prisma } from "@/lib/db";
+import { scoreRepairResponse } from "@/lib/ai/scoring";
+
+const schema = z.object({
+  user_id: z.string(),
+  domain_id: z.string(),
+  concept_id: z.string().optional(),
+  probe_id: z.string().optional(),
+  delay_hours: z.coerce.number().optional(),
+  response_text: z.string().optional(),
+  confidence_rating: z.coerce.number().min(1).max(5).optional()
+});
+
+export async function POST(request: Request) {
+  const data = schema.parse(await request.json());
+
+  if (data.probe_id && data.response_text && data.confidence_rating) {
+    const probe = await prisma.retentionProbe.findUniqueOrThrow({
+      where: { id: data.probe_id }
+    });
+    const result = scoreRepairResponse(data.response_text, data.confidence_rating);
+    const updated = await prisma.$transaction(async (tx) => {
+      const completed = await tx.retentionProbe.update({
+        where: { id: data.probe_id },
+        data: {
+          completed_at: new Date(),
+          score: result.score,
+          confidence_rating: data.confidence_rating,
+          result: {
+            response_text: data.response_text,
+            feedback: result.feedback,
+            confidence_calibration: result.confidenceCalibration
+          }
+        }
+      });
+
+      await tx.evidenceEvent.create({
+        data: {
+          user_id: probe.user_id,
+          domain_id: probe.domain_id,
+          concept_id: probe.concept_id,
+          event_type: "retention_probe_completed",
+          evidence_value: result.score,
+          confidence_rating: data.confidence_rating,
+          metadata: {
+            probe_id: probe.id,
+            feedback: result.feedback,
+            calibration_error: result.confidenceCalibration
+          }
+        }
+      });
+
+      return completed;
+    });
+
+    return NextResponse.json({ probe: updated, result });
+  }
+
+  if (!data.concept_id) {
+    return NextResponse.json({ error: "concept_id is required to create a probe" }, { status: 400 });
+  }
+
+  const created = await prisma.retentionProbe.create({
+    data: {
+      user_id: data.user_id,
+      domain_id: data.domain_id,
+      concept_id: data.concept_id,
+      scheduled_at: new Date(Date.now() + (data.delay_hours ?? 24) * 60 * 60 * 1000),
+      result: {
+        prompt: "Delayed probe: re-explain the key distinction and apply it to a less familiar API failure."
+      }
+    }
+  });
+
+  return NextResponse.json({ probe: created });
+}

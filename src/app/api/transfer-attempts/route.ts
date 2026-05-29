@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { scoreTransferResponse } from "@/lib/ai/scoring";
+import { scoreTransferResponseWithAi } from "@/lib/ai/evaluation";
 import { masteryLevel, retentionRisk } from "@/lib/metrics";
 
 const schema = z.object({
@@ -19,17 +19,21 @@ function stringArray(value: unknown): string[] {
 export async function POST(request: Request) {
   const data = schema.parse(await request.json());
   const item = await prisma.assessmentItem.findUniqueOrThrow({
-    where: { id: data.scenario_id }
+    where: { id: data.scenario_id },
+    include: { domain: true, concept: true }
   });
   const targetIds = stringArray(item.target_misconceptions);
   const targetMisconceptions = await prisma.misconception.findMany({
     where: { id: { in: targetIds } }
   });
 
-  const result = scoreTransferResponse({
+  const result = await scoreTransferResponseWithAi({
+    domain: item.domain,
+    concept: item.concept,
+    item,
+    misconceptions: targetMisconceptions,
     responseText: data.response_text,
-    confidenceRating: data.confidence_rating,
-    targetMisconceptions
+    confidenceRating: data.confidence_rating
   });
 
   const attempt = await prisma.$transaction(async (tx) => {
@@ -129,7 +133,12 @@ export async function POST(request: Request) {
         metadata: {
           transfer_attempt_id: created.id,
           retention_probe_id: probe.id,
-          calibration_error: result.confidenceCalibration
+          calibration_error: result.confidenceCalibration,
+          scoring_provider: result.provider,
+          scoring_model: result.model,
+          provider_error: result.providerError,
+          uncertainty_flags: result.uncertaintyFlags,
+          requires_expert_validation: result.requiresExpertValidation
         }
       }
     });

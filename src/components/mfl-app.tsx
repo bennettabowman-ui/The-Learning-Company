@@ -164,6 +164,11 @@ type Research = {
   };
 };
 
+type RepairStep = {
+  label: string;
+  prompt: string;
+};
+
 type Bootstrap = {
   users: User[];
   domain: Domain | null;
@@ -205,6 +210,13 @@ function statusClass(value: number) {
   if (value >= 0.7) return "red";
   if (value >= 0.4) return "amber";
   return "green";
+}
+
+function labelFromStepType(stepType: string) {
+  return stepType
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function ConfidenceControl({
@@ -789,7 +801,9 @@ function DiagnosticScreen({
   const [responseText, setResponseText] = useState("");
   const [confidence, setConfidence] = useState(3);
   const [startedAt, setStartedAt] = useState(Date.now());
-  const [result, setResult] = useState<{ feedback: string; score: number } | null>(null);
+  const [result, setResult] = useState<{ feedback: string; score: number; provider?: string; model?: string } | null>(
+    null
+  );
   const item = diagnosticItems.find((candidate) => candidate.id === itemId) ?? diagnosticItems[0];
 
   useEffect(() => {
@@ -800,13 +814,16 @@ function DiagnosticScreen({
     if (!item) return;
     setBusy(true);
     try {
-      const payload = await postJson<{ result: { feedback: string; score: number } }>("/api/responses", {
+      const payload = await postJson<{ result: { feedback: string; score: number; provider?: string; model?: string } }>(
+        "/api/responses",
+        {
         user_id: user.id,
         assessment_item_id: item.id,
         response_text: responseText,
         confidence_rating: confidence,
         response_time: Math.round((Date.now() - startedAt) / 1000)
-      });
+        }
+      );
       setResult(payload.result);
       setResponseText("");
       setStartedAt(Date.now());
@@ -845,7 +862,8 @@ function DiagnosticScreen({
         </button>
         {result ? (
           <div className="feedback" style={{ marginTop: 12 }}>
-            Score {score(result.score)}/5. {result.feedback}
+            Score {score(result.score)}/5. {result.feedback} Scoring:{" "}
+            {result.model ? `${result.provider} · ${result.model}` : result.provider ?? "deterministic_fallback"}.
           </div>
         ) : null}
       </section>
@@ -905,8 +923,9 @@ function RepairScreen({
   const [learnerResponse, setLearnerResponse] = useState("");
   const [confidence, setConfidence] = useState(3);
   const [feedback, setFeedback] = useState("");
+  const [sequenceProvider, setSequenceProvider] = useState("deterministic_fallback");
 
-  const steps = useMemo(
+  const fallbackSteps = useMemo<RepairStep[]>(
     () => [
       {
         label: "Prediction",
@@ -932,12 +951,50 @@ function RepairScreen({
     ],
     [targetMisconception]
   );
+  const [steps, setSteps] = useState<RepairStep[]>(fallbackSteps);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRepairSequence() {
+      setSteps(fallbackSteps);
+      setStepIndex(0);
+      setSequenceProvider("deterministic_fallback");
+      const params = new URLSearchParams({
+        domainId: domain.id,
+        userId: user.id
+      });
+      if (targetMisconception?.id) params.set("misconceptionId", targetMisconception.id);
+
+      try {
+        const response = await fetch(`/api/repair-sequence?${params.toString()}`);
+        const data = (await response.json()) as {
+          steps?: Array<{ step_type: string; prompt: string }>;
+          provider?: string;
+          model?: string;
+        };
+        if (!cancelled && data.steps?.length) {
+          setSteps(data.steps.map((step) => ({ label: labelFromStepType(step.step_type), prompt: step.prompt })));
+          setSequenceProvider(data.model ? `${data.provider} · ${data.model}` : data.provider ?? "deterministic_fallback");
+        }
+      } catch {
+        if (!cancelled) setSteps(fallbackSteps);
+      }
+    }
+
+    loadRepairSequence();
+    return () => {
+      cancelled = true;
+    };
+  }, [domain.id, fallbackSteps, targetMisconception?.id, user.id]);
 
   async function submit() {
     if (!targetMisconception) return;
     setBusy(true);
     try {
-      const result = await postJson<{ result: { feedback: string; score: number } }>("/api/interventions", {
+      const result = await postJson<{
+        result: { feedback: string; score: number; nextPrompt?: string; provider?: string; model?: string };
+      }>("/api/interventions", {
         user_id: user.id,
         domain_id: domain.id,
         concept_id: targetMisconception.concept_id,
@@ -947,9 +1004,20 @@ function RepairScreen({
         learner_response: learnerResponse,
         confidence_rating: confidence
       });
-      setFeedback(`Outcome ${score(result.result.score)}/5. ${result.result.feedback}`);
+      const providerLabel = result.result.model
+        ? `${result.result.provider} · ${result.result.model}`
+        : result.result.provider ?? "deterministic_fallback";
+      setFeedback(`Outcome ${score(result.result.score)}/5. ${result.result.feedback} Scoring: ${providerLabel}.`);
       setLearnerResponse("");
-      setStepIndex((current) => Math.min(current + 1, steps.length - 1));
+      const nextIndex = Math.min(stepIndex + 1, steps.length - 1);
+      if (result.result.nextPrompt) {
+        setSteps((current) =>
+          current.map((step, index) =>
+            index === nextIndex ? { ...step, label: "Adaptive follow-up", prompt: result.result.nextPrompt! } : step
+          )
+        );
+      }
+      setStepIndex(nextIndex);
       await onRefresh();
     } finally {
       setBusy(false);
@@ -962,6 +1030,9 @@ function RepairScreen({
         <h2>{user.experimental_condition === "CONTROL" ? "Standard explanation" : "Socratic repair sequence"}</h2>
         <p className="section-copy" style={{ marginBottom: 12 }}>
           Target: {targetMisconception?.name ?? "Complete a diagnostic first to identify a repair target."}
+        </p>
+        <p className="brand-subtitle" style={{ marginBottom: 10 }}>
+          Repair sequence source: {sequenceProvider}
         </p>
         <div className="flow-steps">
           {steps.slice(0, 9).map((step, index) => (
@@ -1029,14 +1100,22 @@ function TransferScreen({
     if (!scenario) return;
     setBusy(true);
     try {
-      const result = await postJson<{ result: { feedback: string; score: number } }>("/api/transfer-attempts", {
+      const result = await postJson<{ result: { feedback: string; score: number; provider?: string; model?: string } }>(
+        "/api/transfer-attempts",
+        {
         user_id: user.id,
         domain_id: domain.id,
         scenario_id: scenario.id,
         response_text: responseText,
         confidence_rating: confidence
-      });
-      setFeedback(`Transfer score ${score(result.result.score)}/5. ${result.result.feedback} A 24-hour retention probe was scheduled.`);
+        }
+      );
+      const providerLabel = result.result.model
+        ? `${result.result.provider} · ${result.result.model}`
+        : result.result.provider ?? "deterministic_fallback";
+      setFeedback(
+        `Transfer score ${score(result.result.score)}/5. ${result.result.feedback} Scoring: ${providerLabel}. A 24-hour retention probe was scheduled.`
+      );
       setResponseText("");
       await onRefresh();
     } finally {
@@ -1122,14 +1201,20 @@ function RetentionScreen({
     if (!selectedProbe) return;
     setBusy(true);
     try {
-      const result = await postJson<{ result: { feedback: string; score: number } }>("/api/retention-probes", {
+      const result = await postJson<{ result: { feedback: string; score: number; provider?: string; model?: string } }>(
+        "/api/retention-probes",
+        {
         user_id: user.id,
         domain_id: domain.id,
         probe_id: selectedProbe.id,
         response_text: responseText,
         confidence_rating: confidence
-      });
-      setFeedback(`Retention score ${score(result.result.score)}/5. ${result.result.feedback}`);
+        }
+      );
+      const providerLabel = result.result.model
+        ? `${result.result.provider} · ${result.result.model}`
+        : result.result.provider ?? "deterministic_fallback";
+      setFeedback(`Retention score ${score(result.result.score)}/5. ${result.result.feedback} Scoring: ${providerLabel}.`);
       setResponseText("");
       await onRefresh();
     } finally {

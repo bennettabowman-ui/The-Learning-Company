@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { scoreRepairResponse } from "@/lib/ai/scoring";
+import { scoreRepairResponseWithAi } from "@/lib/ai/evaluation";
 
 const schema = z.object({
   user_id: z.string(),
@@ -16,7 +16,19 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   const data = schema.parse(await request.json());
-  const result = scoreRepairResponse(data.learner_response, data.confidence_rating);
+  const [domain, concept, misconception] = await Promise.all([
+    prisma.domain.findUniqueOrThrow({ where: { id: data.domain_id } }),
+    prisma.concept.findUniqueOrThrow({ where: { id: data.concept_id } }),
+    data.misconception_id ? prisma.misconception.findUnique({ where: { id: data.misconception_id } }) : null
+  ]);
+  const result = await scoreRepairResponseWithAi({
+    domain,
+    concept,
+    misconception,
+    promptUsed: data.prompt_used,
+    learnerResponse: data.learner_response,
+    confidenceRating: data.confidence_rating
+  });
 
   const intervention = await prisma.$transaction(async (tx) => {
     const session = await tx.session.create({
@@ -53,6 +65,8 @@ export async function POST(request: Request) {
         }
       });
       const nextProbability = Math.max(0, (existing?.probability ?? 0.55) - (result.score >= 4 ? 0.35 : 0.15));
+      const modelProbability =
+        result.provider === "openai" ? result.postMisconceptionProbability : Number(nextProbability.toFixed(2));
 
       await tx.learnerMisconceptionState.upsert({
         where: {
@@ -66,14 +80,14 @@ export async function POST(request: Request) {
           user_id: data.user_id,
           domain_id: data.domain_id,
           misconception_id: data.misconception_id,
-          probability: nextProbability,
+          probability: modelProbability,
           confidence_weighted_error_score: 0,
           evidence_count: 1,
           repaired_at: result.score >= 4 ? new Date() : null,
           status: result.score >= 4 ? "REPAIRED" : "REPAIRING"
         },
         update: {
-          probability: nextProbability,
+          probability: modelProbability,
           evidence_count: { increment: 1 },
           repaired_at: result.score >= 4 ? new Date() : undefined,
           status: result.score >= 4 ? "REPAIRED" : "REPAIRING"
@@ -92,7 +106,14 @@ export async function POST(request: Request) {
         metadata: {
           intervention_id: created.id,
           misconception_id: data.misconception_id,
-          calibration_error: result.confidenceCalibration
+          calibration_error: result.confidenceCalibration,
+          post_misconception_probability: result.postMisconceptionProbability,
+          next_socratic_prompt: result.nextPrompt,
+          scoring_provider: result.provider,
+          scoring_model: result.model,
+          provider_error: result.providerError,
+          uncertainty_flags: result.uncertaintyFlags,
+          requires_expert_validation: result.requiresExpertValidation
         }
       }
     });

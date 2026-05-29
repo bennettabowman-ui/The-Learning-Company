@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { scoreDiagnosticResponse } from "@/lib/ai/scoring";
+import { scoreDiagnosticResponseWithAi } from "@/lib/ai/evaluation";
 import { masteryLevel, retentionRisk } from "@/lib/metrics";
 
 const schema = z.object({
@@ -16,13 +16,16 @@ const schema = z.object({
 export async function POST(request: Request) {
   const data = schema.parse(await request.json());
   const item = await prisma.assessmentItem.findUniqueOrThrow({
-    where: { id: data.assessment_item_id }
+    where: { id: data.assessment_item_id },
+    include: { domain: true, concept: true }
   });
   const misconceptions = await prisma.misconception.findMany({
     where: { domain_id: item.domain_id }
   });
 
-  const result = scoreDiagnosticResponse({
+  const result = await scoreDiagnosticResponseWithAi({
+    domain: item.domain,
+    concept: item.concept,
     item,
     misconceptions,
     responseText: data.response_text,
@@ -135,7 +138,13 @@ export async function POST(request: Request) {
           event_type: "misconception_detected",
           evidence_value: detected.probability,
           confidence_rating: data.confidence_rating,
-          metadata: detected
+          metadata: {
+            ...detected,
+            scoring_provider: result.provider,
+            scoring_model: result.model,
+            uncertainty_flags: result.uncertaintyFlags,
+            requires_expert_validation: result.requiresExpertValidation
+          }
         }
       });
     }
@@ -152,7 +161,12 @@ export async function POST(request: Request) {
           assessment_item_id: item.id,
           confidence_weighted_error: result.confidenceWeightedError,
           calibration_error: result.confidenceCalibration,
-          recommended_next_step: result.recommendedNextStep
+          recommended_next_step: result.recommendedNextStep,
+          scoring_provider: result.provider,
+          scoring_model: result.model,
+          provider_error: result.providerError,
+          uncertainty_flags: result.uncertaintyFlags,
+          requires_expert_validation: result.requiresExpertValidation
         }
       }
     });

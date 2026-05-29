@@ -19,6 +19,12 @@ The prototype uses SQLite locally through Prisma. The schema is designed to move
 
 `npm run db:push` attempts Prisma `db push` first and falls back to a local SQLite initializer if the Prisma schema engine is unavailable on the machine.
 
+## AI Configuration
+
+Set `OPENAI_API_KEY` in `.env` to enable real model-backed diagnostic scoring, misconception detection, transfer scoring, retention scoring, and Socratic repair sequence generation. `OPENAI_MODEL` defaults to `gpt-5.4-mini`.
+
+When `OPENAI_API_KEY` is unset or a model call fails, the app records `deterministic_fallback` as the scoring provider and uses the local fallback scorer.
+
 ## What Is Included
 
 - Domain setup inputs for the default domain.

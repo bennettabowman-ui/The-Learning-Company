@@ -31,10 +31,12 @@ Adds a diagnostic, transfer, or retention item.
 `POST /api/responses`
 
 Captures a learner diagnostic response, requires confidence rating, scores the response, updates learner state, and creates evidence events.
+Uses model-backed structured scoring when `OPENAI_API_KEY` is configured; otherwise records deterministic fallback scoring.
 
 `POST /api/interventions`
 
 Captures a Socratic repair or standard explanation intervention and updates misconception repair evidence.
+The experimental path scores the learner's repair response and returns an adaptive next Socratic prompt when a model is configured.
 
 `POST /api/transfer-attempts`
 
@@ -43,6 +45,10 @@ Scores a transfer attempt, updates concept state, and schedules a retention prob
 `POST /api/retention-probes`
 
 Creates or completes a delayed retention probe.
+
+`GET /api/repair-sequence?domainId=...&misconceptionId=...&userId=...`
+
+Generates a Socratic repair sequence from the target misconception and recent learner evidence, with deterministic fallback when no model is configured.
 
 ## Dashboards
 

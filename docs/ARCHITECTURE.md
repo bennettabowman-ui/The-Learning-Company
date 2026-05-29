@@ -6,7 +6,7 @@
 - **Backend:** Next.js API routes.
 - **Database:** Prisma ORM with SQLite for local MVP. Production target is Postgres.
 - **Authentication:** local prototype login through seeded users.
-- **AI layer:** prompt templates plus a reusable scoring wrapper. The current scaffold uses deterministic scoring fallbacks when no model key is configured.
+- **AI layer:** prompt templates plus a reusable OpenAI Responses API wrapper. Model-backed structured scoring is used when `OPENAI_API_KEY` is configured; deterministic scoring is retained only as an offline fallback.
 - **Analytics:** append-only `EvidenceEvent` records for every diagnostic, repair, transfer, and retention action.
 
 ## Runtime Components
@@ -46,9 +46,11 @@ Prisma models track domain structure, learner responses, learner concept state, 
 The AI layer is intentionally thin:
 
 - `src/lib/ai/prompts.ts` stores reusable prompt templates.
-- `src/lib/ai/scoring.ts` provides deterministic local scoring and the interface shape expected from a future LLM call.
+- `src/lib/ai/openai.ts` calls the OpenAI Responses API with structured JSON schemas.
+- `src/lib/ai/evaluation.ts` maps model JSON into product metrics and falls back safely when the model is unavailable.
+- `src/lib/ai/scoring.ts` provides deterministic local fallback scoring.
 
-Future model-backed calls should preserve the same structured output shape.
+All API routes record `scoring_provider`, `scoring_model`, uncertainty flags, and expert-validation requirements in `EvidenceEvent.metadata`.
 
 ## Grounding Flow
 

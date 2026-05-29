@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { scoreRepairResponse } from "@/lib/ai/scoring";
+import { scoreRepairResponseWithAi } from "@/lib/ai/evaluation";
 
 const schema = z.object({
   user_id: z.string(),
@@ -18,9 +18,16 @@ export async function POST(request: Request) {
 
   if (data.probe_id && data.response_text && data.confidence_rating) {
     const probe = await prisma.retentionProbe.findUniqueOrThrow({
-      where: { id: data.probe_id }
+      where: { id: data.probe_id },
+      include: { domain: true, concept: true }
     });
-    const result = scoreRepairResponse(data.response_text, data.confidence_rating);
+    const result = await scoreRepairResponseWithAi({
+      domain: probe.domain,
+      concept: probe.concept,
+      promptUsed: "Delayed retention probe",
+      learnerResponse: data.response_text,
+      confidenceRating: data.confidence_rating
+    });
     const updated = await prisma.$transaction(async (tx) => {
       const completed = await tx.retentionProbe.update({
         where: { id: data.probe_id },
@@ -31,7 +38,12 @@ export async function POST(request: Request) {
           result: {
             response_text: data.response_text,
             feedback: result.feedback,
-            confidence_calibration: result.confidenceCalibration
+            confidence_calibration: result.confidenceCalibration,
+            scoring_provider: result.provider,
+            scoring_model: result.model,
+            provider_error: result.providerError,
+            uncertainty_flags: result.uncertaintyFlags,
+            requires_expert_validation: result.requiresExpertValidation
           }
         }
       });
@@ -47,7 +59,12 @@ export async function POST(request: Request) {
           metadata: {
             probe_id: probe.id,
             feedback: result.feedback,
-            calibration_error: result.confidenceCalibration
+            calibration_error: result.confidenceCalibration,
+            scoring_provider: result.provider,
+            scoring_model: result.model,
+            provider_error: result.providerError,
+            uncertainty_flags: result.uncertaintyFlags,
+            requires_expert_validation: result.requiresExpertValidation
           }
         }
       });

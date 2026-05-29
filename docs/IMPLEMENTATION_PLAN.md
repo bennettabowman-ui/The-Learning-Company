@@ -17,8 +17,8 @@
 
 ## Phase 2: Model-Backed AI
 
-- Add provider wrapper behind the existing scoring interface.
-- Enforce structured JSON outputs.
+- Add provider wrapper behind the existing scoring interface. **Done for the OpenAI Responses API.**
+- Enforce structured JSON outputs. **Done for diagnostic, repair, transfer, retention, and repair sequence generation.**
 - Add trace logging for prompt, model, output, and validation flags.
 - Run expert calibration against scored response samples.
 

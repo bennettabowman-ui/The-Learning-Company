@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS "User" (
   "name" TEXT NOT NULL,
   "email" TEXT NOT NULL,
   "role" TEXT NOT NULL DEFAULT 'LEARNER',
-  "experimental_condition" TEXT NOT NULL DEFAULT 'EXPERIMENTAL',
+  "experimental_condition" TEXT NOT NULL,
   "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS "Domain" (
@@ -147,6 +147,11 @@ CREATE TABLE IF NOT EXISTS "LearnerResponse" (
   "ai_score" REAL NOT NULL,
   "ai_feedback" TEXT NOT NULL,
   "detected_misconceptions" JSONB NOT NULL,
+  "scoring_provider" TEXT,
+  "scoring_model" TEXT,
+  "scoring_error" TEXT,
+  "requires_expert_validation" BOOLEAN NOT NULL DEFAULT false,
+  "uncertainty_flags" JSONB,
   "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "LearnerResponse_session_id_fkey" FOREIGN KEY ("session_id") REFERENCES "Session" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT "LearnerResponse_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
@@ -179,6 +184,11 @@ CREATE TABLE IF NOT EXISTS "TransferAttempt" (
   "rubric_feedback" TEXT NOT NULL,
   "transfer_distance" INTEGER NOT NULL,
   "confidence_rating" INTEGER NOT NULL,
+  "scoring_provider" TEXT,
+  "scoring_model" TEXT,
+  "scoring_error" TEXT,
+  "requires_expert_validation" BOOLEAN NOT NULL DEFAULT false,
+  "uncertainty_flags" JSONB,
   "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "TransferAttempt_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT "TransferAttempt_domain_id_fkey" FOREIGN KEY ("domain_id") REFERENCES "Domain" ("id") ON DELETE CASCADE ON UPDATE CASCADE
@@ -193,6 +203,11 @@ CREATE TABLE IF NOT EXISTS "RetentionProbe" (
   "score" REAL,
   "confidence_rating" INTEGER,
   "result" JSONB,
+  "scoring_provider" TEXT,
+  "scoring_model" TEXT,
+  "scoring_error" TEXT,
+  "requires_expert_validation" BOOLEAN NOT NULL DEFAULT false,
+  "uncertainty_flags" JSONB,
   CONSTRAINT "RetentionProbe_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT "RetentionProbe_domain_id_fkey" FOREIGN KEY ("domain_id") REFERENCES "Domain" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT "RetentionProbe_concept_id_fkey" FOREIGN KEY ("concept_id") REFERENCES "Concept" ("id") ON DELETE CASCADE ON UPDATE CASCADE
@@ -258,6 +273,23 @@ CREATE UNIQUE INDEX IF NOT EXISTS "ExpertReview_reviewer_user_id_review_target_t
 CREATE INDEX IF NOT EXISTS "ExpertReview_domain_id_idx" ON "ExpertReview"("domain_id");
 CREATE INDEX IF NOT EXISTS "ExpertReview_review_target_type_review_target_id_idx" ON "ExpertReview"("review_target_type", "review_target_id");
 `);
+
+function addColumn(table, columnSql) {
+  try {
+    db.exec(`ALTER TABLE "${table}" ADD COLUMN ${columnSql};`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes("duplicate column name")) throw error;
+  }
+}
+
+for (const table of ["LearnerResponse", "TransferAttempt", "RetentionProbe"]) {
+  addColumn(table, '"scoring_provider" TEXT');
+  addColumn(table, '"scoring_model" TEXT');
+  addColumn(table, '"scoring_error" TEXT');
+  addColumn(table, '"requires_expert_validation" BOOLEAN NOT NULL DEFAULT false');
+  addColumn(table, '"uncertainty_flags" JSONB');
+}
 
 db.close();
 console.log(`Initialized SQLite database at ${dbPath}`);

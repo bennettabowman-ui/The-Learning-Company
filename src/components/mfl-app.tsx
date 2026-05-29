@@ -35,6 +35,8 @@ type User = {
   experimental_condition: "CONTROL" | "EXPERIMENTAL";
 };
 
+type LearnerAssignmentChoice = "AUTO_RANDOMIZED" | "CONTROL" | "EXPERIMENTAL";
+
 type Concept = {
   id: string;
   domain_id: string;
@@ -181,6 +183,8 @@ type ExpertQueueItem = {
 type CalibrationMetrics = {
   review_count: number;
   scored_pair_count: number;
+  minimum_n_for_agreement: number;
+  agreement_status: "insufficient_n" | "reportable";
   mean_absolute_error: number | null;
   bias_ai_minus_expert: number | null;
   pearson_correlation: number | null;
@@ -1410,7 +1414,7 @@ function ResearchScreen({
   const [learner, setLearner] = useState({
     name: "",
     email: "",
-    experimental_condition: "EXPERIMENTAL"
+    experimental_condition: "AUTO_RANDOMIZED" as LearnerAssignmentChoice
   });
   const [reviewQueue, setReviewQueue] = useState<ExpertQueueItem[]>([]);
   const [calibration, setCalibration] = useState<CalibrationResponse | null>(null);
@@ -1452,12 +1456,20 @@ function ResearchScreen({
   async function addLearner() {
     setBusy(true);
     try {
-      await postJson("/api/users", {
-        ...learner,
+      const body = {
+        name: learner.name,
+        email: learner.email,
         role: "LEARNER",
-        domain_id: domain.id
+        domain_id: domain.id,
+        ...(learner.experimental_condition === "AUTO_RANDOMIZED"
+          ? {}
+          : { experimental_condition: learner.experimental_condition })
+      };
+
+      await postJson("/api/users", {
+        ...body
       });
-      setLearner({ name: "", email: "", experimental_condition: "EXPERIMENTAL" });
+      setLearner({ name: "", email: "", experimental_condition: "AUTO_RANDOMIZED" });
       await onRefresh();
     } finally {
       setBusy(false);
@@ -1515,6 +1527,11 @@ function ResearchScreen({
     <div className="grid two">
       <section className="panel">
         <h2>Expert calibration</h2>
+        <p className="brand-subtitle">
+          Agreement status: {calibration?.overall.agreement_status === "reportable" ? "reportable" : "insufficient n"};
+          minimum n={calibration?.overall.minimum_n_for_agreement ?? 10}. MAE and bias remain descriptive before the
+          threshold.
+        </p>
         <div className="metric-row" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
           <div className="metric">
             <span className="small-label">Reviewed pairs</span>
@@ -1682,8 +1699,9 @@ function ResearchScreen({
           <SelectField
             label="Condition"
             value={learner.experimental_condition}
-            onChange={(value) => setLearner({ ...learner, experimental_condition: value })}
+            onChange={(value) => setLearner({ ...learner, experimental_condition: value as LearnerAssignmentChoice })}
             options={[
+              { label: "AUTO BALANCED", value: "AUTO_RANDOMIZED" },
               { label: "EXPERIMENTAL", value: "EXPERIMENTAL" },
               { label: "CONTROL", value: "CONTROL" }
             ]}

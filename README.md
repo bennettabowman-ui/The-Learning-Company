@@ -24,6 +24,7 @@ The prototype uses SQLite locally through Prisma. The schema is designed to move
 Set `OPENAI_API_KEY` in `.env` to enable real model-backed diagnostic scoring, misconception detection, transfer scoring, retention scoring, and Socratic repair sequence generation. `OPENAI_MODEL` defaults to `gpt-5.4-mini`.
 
 When `OPENAI_API_KEY` is unset or a model call fails, the app records `deterministic_fallback` as the scoring provider and uses the local fallback scorer.
+Scoring provenance is stored on each diagnostic response, transfer attempt, and retention probe row so fallback-scored artifacts can be filtered during analysis.
 
 ## What Is Included
 
@@ -36,6 +37,7 @@ When `OPENAI_API_KEY` is unset or a model call fails, the app records `determini
 - Learner mastery dashboard.
 - Research dashboard with condition comparison and CSV export.
 - Blind expert calibration queue with agreement metrics for validating AI scores.
+- Balanced random assignment for new pilot learners when no condition is manually selected.
 - AI prompt templates and deterministic fallback scoring.
 
 ## Documents

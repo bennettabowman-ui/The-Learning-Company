@@ -6,6 +6,8 @@ type ReviewLike = {
   expert_misconception_labels: unknown;
 };
 
+const MIN_SCORED_PAIRS_FOR_AGREEMENT = 10;
+
 function asNumber(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
@@ -117,6 +119,7 @@ export function computeCalibrationMetrics(reviews: ReviewLike[]) {
 
   const absoluteErrors = scorePairs.map(([ai, expert]) => Math.abs(ai - expert));
   const signedErrors = scorePairs.map(([ai, expert]) => ai - expert);
+  const hasReportableAgreement = scorePairs.length >= MIN_SCORED_PAIRS_FOR_AGREEMENT;
 
   let truePositive = 0;
   let falsePositive = 0;
@@ -141,13 +144,15 @@ export function computeCalibrationMetrics(reviews: ReviewLike[]) {
   return {
     review_count: reviews.length,
     scored_pair_count: scorePairs.length,
+    minimum_n_for_agreement: MIN_SCORED_PAIRS_FOR_AGREEMENT,
+    agreement_status: hasReportableAgreement ? "reportable" : "insufficient_n",
     ai_score_mean: round(metricAverage(scorePairs.map(([ai]) => ai))),
     expert_score_mean: round(metricAverage(scorePairs.map(([, expert]) => expert))),
     mean_absolute_error: round(metricAverage(absoluteErrors)),
     bias_ai_minus_expert: round(metricAverage(signedErrors)),
-    pearson_correlation: round(pearson(scorePairs)),
-    spearman_correlation: round(spearman(scorePairs)),
-    quadratic_weighted_kappa: round(quadraticWeightedKappa(scorePairs)),
+    pearson_correlation: round(hasReportableAgreement ? pearson(scorePairs) : null),
+    spearman_correlation: round(hasReportableAgreement ? spearman(scorePairs) : null),
+    quadratic_weighted_kappa: round(hasReportableAgreement ? quadraticWeightedKappa(scorePairs) : null),
     misconception_precision: round(precision),
     misconception_recall: round(recall),
     misconception_f1: round(f1),

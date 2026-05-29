@@ -35,6 +35,7 @@ API routes handle:
 - Transfer scoring.
 - Retention probe scheduling and scoring.
 - Blind expert review queue and model-vs-expert calibration metrics.
+- Balanced learner assignment to control or experimental conditions.
 - Dashboard aggregation.
 - CSV export.
 
@@ -51,7 +52,7 @@ The AI layer is intentionally thin:
 - `src/lib/ai/evaluation.ts` maps model JSON into product metrics and falls back safely when the model is unavailable.
 - `src/lib/ai/scoring.ts` provides deterministic local fallback scoring.
 
-All API routes record `scoring_provider`, `scoring_model`, uncertainty flags, and expert-validation requirements in `EvidenceEvent.metadata`.
+All scoring routes record `scoring_provider`, `scoring_model`, uncertainty flags, and expert-validation requirements on the scored artifact row and in `EvidenceEvent.metadata`.
 
 ## Grounding Flow
 

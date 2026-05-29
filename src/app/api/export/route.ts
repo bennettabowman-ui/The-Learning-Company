@@ -10,6 +10,10 @@ function csvCell(value: unknown) {
   return `"${text.replace(/"/g, '""')}"`;
 }
 
+function metadataRecord(value: unknown) {
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const domainId = searchParams.get("domainId");
@@ -42,6 +46,11 @@ export async function GET(request: Request) {
       "score",
       "confidence",
       "item_or_scenario",
+      "scoring_provider",
+      "scoring_model",
+      "requires_expert_validation",
+      "uncertainty_flags",
+      "scoring_error",
       "metadata",
       "created_at"
     ],
@@ -54,6 +63,11 @@ export async function GET(request: Request) {
       response.ai_score,
       response.confidence_rating,
       response.assessment_item_id,
+      response.scoring_provider ?? "",
+      response.scoring_model ?? "",
+      response.requires_expert_validation,
+      response.uncertainty_flags ?? "",
+      response.scoring_error ?? "",
       response.detected_misconceptions,
       response.created_at.toISOString()
     ]),
@@ -66,6 +80,11 @@ export async function GET(request: Request) {
       transfer.score,
       transfer.confidence_rating,
       transfer.scenario_id,
+      transfer.scoring_provider ?? "",
+      transfer.scoring_model ?? "",
+      transfer.requires_expert_validation,
+      transfer.uncertainty_flags ?? "",
+      transfer.scoring_error ?? "",
       transfer.rubric_feedback,
       transfer.created_at.toISOString()
     ]),
@@ -78,21 +97,34 @@ export async function GET(request: Request) {
       probe.score ?? "",
       probe.confidence_rating ?? "",
       probe.id,
+      probe.scoring_provider ?? "",
+      probe.scoring_model ?? "",
+      probe.requires_expert_validation,
+      probe.uncertainty_flags ?? "",
+      probe.scoring_error ?? "",
       probe.result,
       (probe.completed_at ?? probe.scheduled_at).toISOString()
     ]),
-    ...evidence.map((event) => [
-      "evidence_event",
-      event.user.name,
-      event.user.experimental_condition,
-      event.concept?.name ?? "",
-      event.event_type,
-      event.evidence_value,
-      event.confidence_rating ?? "",
-      event.id,
-      event.metadata,
-      event.created_at.toISOString()
-    ]),
+    ...evidence.map((event) => {
+      const metadata = metadataRecord(event.metadata);
+      return [
+        "evidence_event",
+        event.user.name,
+        event.user.experimental_condition,
+        event.concept?.name ?? "",
+        event.event_type,
+        event.evidence_value,
+        event.confidence_rating ?? "",
+        event.id,
+        metadata.scoring_provider ?? "",
+        metadata.scoring_model ?? "",
+        metadata.requires_expert_validation ?? "",
+        metadata.uncertainty_flags ?? "",
+        metadata.provider_error ?? "",
+        event.metadata,
+        event.created_at.toISOString()
+      ];
+    }),
     ...expertReviews.map((review) => [
       "expert_review",
       review.reviewer.name,
@@ -102,6 +134,11 @@ export async function GET(request: Request) {
       review.expert_transfer_score ?? review.expert_explanation_quality_score ?? "",
       "",
       review.review_target_id,
+      "",
+      "",
+      "",
+      "",
+      "",
       {
         ai_score: review.ai_score,
         ai_misconception_labels: review.ai_misconception_labels,

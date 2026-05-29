@@ -35,6 +35,11 @@ export async function POST(request: Request) {
           completed_at: new Date(),
           score: result.score,
           confidence_rating: data.confidence_rating,
+          scoring_provider: result.provider,
+          scoring_model: result.model,
+          scoring_error: result.providerError,
+          requires_expert_validation: result.requiresExpertValidation,
+          uncertainty_flags: result.uncertaintyFlags,
           result: {
             response_text: data.response_text,
             feedback: result.feedback,

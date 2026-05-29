@@ -4,7 +4,7 @@ The schema is centered on evidence of understanding, not content consumption.
 
 ## Core Entities
 
-- `User`: admin or learner, with control/experimental assignment.
+- `User`: admin or learner, with control/experimental assignment. Learners are assigned by the API with balanced randomization unless an admin explicitly chooses a condition.
 - `Domain`: commercially valuable learning domain with source grounding fields.
 - `Concept`: target concept and prerequisite links.
 - `Misconception`: known faulty mental model tied to a concept.
@@ -18,6 +18,14 @@ The schema is centered on evidence of understanding, not content consumption.
 - `RetentionProbe`: scheduled delayed probe and result.
 - `EvidenceEvent`: append-only measurement event.
 - `ExpertReview`: blind human score for a diagnostic response, transfer attempt, or retention probe used to calibrate AI scoring.
+
+`LearnerResponse`, `TransferAttempt`, and completed `RetentionProbe` rows store scoring provenance directly:
+
+- scoring provider
+- scoring model
+- scoring error
+- uncertainty flags
+- requires expert validation
 
 ## Metric Fields
 

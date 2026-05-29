@@ -8,6 +8,10 @@ All routes return JSON unless noted.
 
 Returns users, active domain, concepts, misconceptions, assessment items, recent sessions, learner state, and research summary.
 
+`POST /api/users`
+
+Creates an admin or learner. Learners are balanced across control and experimental conditions when `experimental_condition` is omitted; admins can still explicitly set a condition.
+
 ## Domain Setup
 
 `POST /api/domain`
@@ -32,6 +36,7 @@ Adds a diagnostic, transfer, or retention item.
 
 Captures a learner diagnostic response, requires confidence rating, scores the response, updates learner state, and creates evidence events.
 Uses model-backed structured scoring when `OPENAI_API_KEY` is configured; otherwise records deterministic fallback scoring.
+Stores row-level scoring provenance so fallback rows can be treated as missing or analyzed separately.
 
 `POST /api/interventions`
 
@@ -62,7 +67,7 @@ Returns cohort metrics, condition comparison, misconception frequency, high-conf
 
 `GET /api/expert-reviews?domainId=...&reviewerId=...`
 
-Returns a blind expert review queue plus recent reviews. Queue items hide learner identity, condition, AI score, and AI feedback from the review UI.
+Returns a randomized blind expert review queue plus recent reviews. Queue items hide learner identity, condition, AI score, and AI feedback from the review UI.
 
 `POST /api/expert-reviews`
 
@@ -71,9 +76,10 @@ Creates or updates a blind expert review for a diagnostic response, transfer att
 `GET /api/calibration?domainId=...`
 
 Returns model-vs-expert agreement metrics: reviewed pairs, MAE, bias, Pearson/Spearman correlation, quadratic weighted kappa, and misconception precision/recall/F1.
+Correlation and kappa are withheld until the scored-pair count reaches the configured minimum n.
 
 ## Export
 
 `GET /api/export?domainId=...`
 
-Returns CSV containing evidence events, responses, transfer attempts, retention probes, and expert reviews.
+Returns CSV containing evidence events, responses, transfer attempts, retention probes, expert reviews, and row-level scoring provenance.

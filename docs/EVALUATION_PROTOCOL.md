@@ -31,10 +31,10 @@ Delayed transfer score.
 
 ## Minimum Pilot Design
 
-- Randomly assign learners to control or experimental condition.
+- Randomly assign learners to control or experimental condition. The MVP API uses balanced randomization when a learner is created without an explicit condition.
 - Use identical diagnostic, immediate transfer, and delayed transfer items.
 - Schedule delayed probes at 24 hours for fast MVP cycles. Add 3-day and 7-day probes when pilot volume allows.
-- Blind-score a sample of open-ended responses with an expert to calibrate AI scoring.
+- Blind-score a randomized sample of open-ended responses with an expert to calibrate AI scoring.
 - Use the expert calibration harness to record blind scores before treating AI scores as defensible outcome measures.
 - Compare condition means on delayed transfer score and report confidence intervals.
 
@@ -64,6 +64,7 @@ Delayed transfer score.
 - expert transfer score
 - expert misconception labels
 - model-vs-expert agreement metrics
+- scoring provider, scoring model, uncertainty flags, and expert-validation requirement
 
 ## AI Scoring Calibration
 
@@ -75,4 +76,6 @@ Agreement metrics:
 - Ordinal rubric scores: quadratic weighted kappa over rounded 0-5 scores.
 - Misconception labels: precision, recall, and F1 against expert-selected labels.
 
-For early pilots, delayed transfer should be reported with expert blind scores as the primary defensible outcome. AI scores should be treated as scalable proxy measures until agreement reaches an acceptable threshold.
+Pearson, Spearman, and quadratic weighted kappa are not reported until the scored-pair count reaches the configured minimum n. MAE and signed bias remain visible as descriptive diagnostics while sample size is small.
+
+For early pilots, delayed transfer should be reported with expert blind scores as the primary defensible outcome. AI scores should be treated as scalable proxy measures until agreement reaches an acceptable threshold. Rows scored by deterministic fallback should be excluded from AI-validity estimates or treated as missing in confirmatory analyses.

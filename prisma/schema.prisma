@@ -35,12 +35,12 @@ enum MisconceptionStatus {
 }
 
 model User {
-  id                     String                  @id @default(cuid())
+  id                     String                      @id @default(cuid())
   name                   String
-  email                  String                  @unique
-  role                   UserRole                @default(LEARNER)
-  experimental_condition ExperimentalCondition   @default(EXPERIMENTAL)
-  created_at             DateTime                @default(now())
+  email                  String                      @unique
+  role                   UserRole                    @default(LEARNER)
+  experimental_condition ExperimentalCondition
+  created_at             DateTime                    @default(now())
   sessions               Session[]
   learnerResponses       LearnerResponse[]
   conceptStates          LearnerConceptState[]
@@ -49,46 +49,46 @@ model User {
   transferAttempts       TransferAttempt[]
   retentionProbes        RetentionProbe[]
   evidenceEvents         EvidenceEvent[]
-  expertReviewsAuthored  ExpertReview[]          @relation("ExpertReviewer")
+  expertReviewsAuthored  ExpertReview[]              @relation("ExpertReviewer")
 }
 
 model Domain {
-  id                       String                  @id @default(cuid())
-  name                     String
-  description              String
-  target_learner           String
-  learner_role             String
-  business_goal            String
-  target_performance_goal  String
-  allowed_source_material  Json
-  examples                 Json
-  counterexamples          Json
-  near_miss_cases          Json
-  real_world_scenarios     Json
-  transfer_scenarios       Json
-  scoring_rubrics          Json
-  expert_explanations      Json
-  created_at               DateTime                @default(now())
-  concepts                 Concept[]
-  misconceptions           Misconception[]
-  assessmentItems          AssessmentItem[]
-  sessions                 Session[]
-  conceptStates            LearnerConceptState[]
-  transferAttempts         TransferAttempt[]
-  retentionProbes          RetentionProbe[]
-  evidenceEvents           EvidenceEvent[]
-  expertReviews            ExpertReview[]
+  id                      String                @id @default(cuid())
+  name                    String
+  description             String
+  target_learner          String
+  learner_role            String
+  business_goal           String
+  target_performance_goal String
+  allowed_source_material Json
+  examples                Json
+  counterexamples         Json
+  near_miss_cases         Json
+  real_world_scenarios    Json
+  transfer_scenarios      Json
+  scoring_rubrics         Json
+  expert_explanations     Json
+  created_at              DateTime              @default(now())
+  concepts                Concept[]
+  misconceptions          Misconception[]
+  assessmentItems         AssessmentItem[]
+  sessions                Session[]
+  conceptStates           LearnerConceptState[]
+  transferAttempts        TransferAttempt[]
+  retentionProbes         RetentionProbe[]
+  evidenceEvents          EvidenceEvent[]
+  expertReviews           ExpertReview[]
 }
 
 model Concept {
-  id                       String                  @id @default(cuid())
+  id                       String                @id @default(cuid())
   domain_id                String
   name                     String
   description              String
   prerequisite_concept_ids Json
   importance_score         Int
   difficulty_score         Int
-  domain                   Domain                  @relation(fields: [domain_id], references: [id], onDelete: Cascade)
+  domain                   Domain                @relation(fields: [domain_id], references: [id], onDelete: Cascade)
   misconceptions           Misconception[]
   assessmentItems          AssessmentItem[]
   conceptStates            LearnerConceptState[]
@@ -101,216 +101,231 @@ model Concept {
 }
 
 model Misconception {
-  id                              String                  @id @default(cuid())
-  domain_id                       String
-  concept_id                      String
-  name                            String
-  description                     String
-  typical_signals                 Json
-  repair_strategy                 String
-  example_wrong_answer            String
-  expert_correction               String
-  domain                          Domain                  @relation(fields: [domain_id], references: [id], onDelete: Cascade)
-  concept                         Concept                 @relation(fields: [concept_id], references: [id], onDelete: Cascade)
-  learnerMisconceptionStates      LearnerMisconceptionState[]
-  interventions                   Intervention[]
+  id                         String                      @id @default(cuid())
+  domain_id                  String
+  concept_id                 String
+  name                       String
+  description                String
+  typical_signals            Json
+  repair_strategy            String
+  example_wrong_answer       String
+  expert_correction          String
+  domain                     Domain                      @relation(fields: [domain_id], references: [id], onDelete: Cascade)
+  concept                    Concept                     @relation(fields: [concept_id], references: [id], onDelete: Cascade)
+  learnerMisconceptionStates LearnerMisconceptionState[]
+  interventions              Intervention[]
 
   @@index([domain_id])
   @@index([concept_id])
 }
 
 model AssessmentItem {
-  id                       String                  @id @default(cuid())
-  domain_id                String
-  concept_id               String
-  item_type                String
-  prompt                   String
-  correct_answer           String
-  scoring_rubric           Json
-  target_misconceptions    Json
-  difficulty               Int
-  transfer_distance        Int
-  domain                   Domain                  @relation(fields: [domain_id], references: [id], onDelete: Cascade)
-  concept                  Concept                 @relation(fields: [concept_id], references: [id], onDelete: Cascade)
-  learnerResponses         LearnerResponse[]
-  expertReviews            ExpertReview[]
+  id                    String            @id @default(cuid())
+  domain_id             String
+  concept_id            String
+  item_type             String
+  prompt                String
+  correct_answer        String
+  scoring_rubric        Json
+  target_misconceptions Json
+  difficulty            Int
+  transfer_distance     Int
+  domain                Domain            @relation(fields: [domain_id], references: [id], onDelete: Cascade)
+  concept               Concept           @relation(fields: [concept_id], references: [id], onDelete: Cascade)
+  learnerResponses      LearnerResponse[]
+  expertReviews         ExpertReview[]
 
   @@index([domain_id])
   @@index([concept_id])
 }
 
 model LearnerConceptState {
-  id                         String   @id @default(cuid())
-  user_id                    String
-  domain_id                  String
-  concept_id                 String
-  recall_strength            Float    @default(0)
-  explanation_quality        Float    @default(0)
-  application_accuracy       Float    @default(0)
-  transfer_score             Float    @default(0)
-  confidence_calibration     Float    @default(0)
-  misconception_probability  Float    @default(0)
-  retention_risk             Float    @default(1)
-  mastery_level              String   @default("unassessed")
-  last_updated               DateTime @updatedAt
-  user                       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  domain                     Domain   @relation(fields: [domain_id], references: [id], onDelete: Cascade)
-  concept                    Concept  @relation(fields: [concept_id], references: [id], onDelete: Cascade)
+  id                        String   @id @default(cuid())
+  user_id                   String
+  domain_id                 String
+  concept_id                String
+  recall_strength           Float    @default(0)
+  explanation_quality       Float    @default(0)
+  application_accuracy      Float    @default(0)
+  transfer_score            Float    @default(0)
+  confidence_calibration    Float    @default(0)
+  misconception_probability Float    @default(0)
+  retention_risk            Float    @default(1)
+  mastery_level             String   @default("unassessed")
+  last_updated              DateTime @updatedAt
+  user                      User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  domain                    Domain   @relation(fields: [domain_id], references: [id], onDelete: Cascade)
+  concept                   Concept  @relation(fields: [concept_id], references: [id], onDelete: Cascade)
 
   @@unique([user_id, domain_id, concept_id])
   @@index([domain_id])
 }
 
 model LearnerMisconceptionState {
-  id                              String               @id @default(cuid())
+  id                              String              @id @default(cuid())
   user_id                         String
   domain_id                       String
   misconception_id                String
-  probability                     Float                @default(0)
-  confidence_weighted_error_score Float                @default(0)
-  evidence_count                  Int                  @default(0)
+  probability                     Float               @default(0)
+  confidence_weighted_error_score Float               @default(0)
+  evidence_count                  Int                 @default(0)
   last_detected_at                DateTime?
   repaired_at                     DateTime?
-  status                          MisconceptionStatus  @default(UNSEEN)
-  user                            User                 @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  misconception                   Misconception        @relation(fields: [misconception_id], references: [id], onDelete: Cascade)
+  status                          MisconceptionStatus @default(UNSEEN)
+  user                            User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  misconception                   Misconception       @relation(fields: [misconception_id], references: [id], onDelete: Cascade)
 
   @@unique([user_id, domain_id, misconception_id])
   @@index([domain_id])
 }
 
 model Session {
-  id                 String          @id @default(cuid())
-  user_id            String
-  domain_id          String
-  session_type       SessionType
-  started_at         DateTime        @default(now())
-  completed_at       DateTime?
-  user               User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  domain             Domain          @relation(fields: [domain_id], references: [id], onDelete: Cascade)
-  learnerResponses   LearnerResponse[]
-  interventions      Intervention[]
+  id               String            @id @default(cuid())
+  user_id          String
+  domain_id        String
+  session_type     SessionType
+  started_at       DateTime          @default(now())
+  completed_at     DateTime?
+  user             User              @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  domain           Domain            @relation(fields: [domain_id], references: [id], onDelete: Cascade)
+  learnerResponses LearnerResponse[]
+  interventions    Intervention[]
 
   @@index([user_id, domain_id])
 }
 
 model LearnerResponse {
-  id                       String    @id @default(cuid())
-  session_id               String
-  user_id                  String
-  assessment_item_id       String
-  response_text            String
-  selected_answer          String?
-  confidence_rating        Int
-  response_time            Int
-  ai_score                 Float
-  ai_feedback              String
-  detected_misconceptions  Json
-  created_at               DateTime  @default(now())
-  session                  Session   @relation(fields: [session_id], references: [id], onDelete: Cascade)
-  user                     User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  assessmentItem           AssessmentItem @relation(fields: [assessment_item_id], references: [id], onDelete: Cascade)
+  id                         String         @id @default(cuid())
+  session_id                 String
+  user_id                    String
+  assessment_item_id         String
+  response_text              String
+  selected_answer            String?
+  confidence_rating          Int
+  response_time              Int
+  ai_score                   Float
+  ai_feedback                String
+  detected_misconceptions    Json
+  scoring_provider           String?
+  scoring_model              String?
+  scoring_error              String?
+  requires_expert_validation Boolean        @default(false)
+  uncertainty_flags          Json?
+  created_at                 DateTime       @default(now())
+  session                    Session        @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  user                       User           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  assessmentItem             AssessmentItem @relation(fields: [assessment_item_id], references: [id], onDelete: Cascade)
 
   @@index([user_id])
   @@index([assessment_item_id])
 }
 
 model Intervention {
-  id                  String          @id @default(cuid())
-  session_id          String
-  user_id             String
-  concept_id          String
-  misconception_id    String?
-  intervention_type   String
-  prompt_used         String
-  learner_response    String
-  ai_feedback         String
-  outcome_score       Float
-  created_at          DateTime        @default(now())
-  session             Session         @relation(fields: [session_id], references: [id], onDelete: Cascade)
-  user                User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  concept             Concept         @relation(fields: [concept_id], references: [id], onDelete: Cascade)
-  misconception       Misconception?  @relation(fields: [misconception_id], references: [id], onDelete: SetNull)
+  id                String         @id @default(cuid())
+  session_id        String
+  user_id           String
+  concept_id        String
+  misconception_id  String?
+  intervention_type String
+  prompt_used       String
+  learner_response  String
+  ai_feedback       String
+  outcome_score     Float
+  created_at        DateTime       @default(now())
+  session           Session        @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  user              User           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  concept           Concept        @relation(fields: [concept_id], references: [id], onDelete: Cascade)
+  misconception     Misconception? @relation(fields: [misconception_id], references: [id], onDelete: SetNull)
 
   @@index([user_id])
   @@index([concept_id])
 }
 
 model TransferAttempt {
-  id                  String      @id @default(cuid())
-  user_id             String
-  domain_id           String
-  scenario_id         String
-  response_text       String
-  score               Float
-  rubric_feedback     String
-  transfer_distance   Int
-  confidence_rating   Int
-  created_at          DateTime    @default(now())
-  user                User        @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  domain              Domain      @relation(fields: [domain_id], references: [id], onDelete: Cascade)
+  id                         String   @id @default(cuid())
+  user_id                    String
+  domain_id                  String
+  scenario_id                String
+  response_text              String
+  score                      Float
+  rubric_feedback            String
+  transfer_distance          Int
+  confidence_rating          Int
+  scoring_provider           String?
+  scoring_model              String?
+  scoring_error              String?
+  requires_expert_validation Boolean  @default(false)
+  uncertainty_flags          Json?
+  created_at                 DateTime @default(now())
+  user                       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  domain                     Domain   @relation(fields: [domain_id], references: [id], onDelete: Cascade)
 
   @@index([user_id, domain_id])
 }
 
 model RetentionProbe {
-  id                 String     @id @default(cuid())
-  user_id            String
-  domain_id          String
-  concept_id         String
-  scheduled_at       DateTime
-  completed_at       DateTime?
-  score              Float?
-  confidence_rating  Int?
-  result             Json?
-  user               User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  domain             Domain     @relation(fields: [domain_id], references: [id], onDelete: Cascade)
-  concept            Concept    @relation(fields: [concept_id], references: [id], onDelete: Cascade)
+  id                         String    @id @default(cuid())
+  user_id                    String
+  domain_id                  String
+  concept_id                 String
+  scheduled_at               DateTime
+  completed_at               DateTime?
+  score                      Float?
+  confidence_rating          Int?
+  result                     Json?
+  scoring_provider           String?
+  scoring_model              String?
+  scoring_error              String?
+  requires_expert_validation Boolean   @default(false)
+  uncertainty_flags          Json?
+  user                       User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  domain                     Domain    @relation(fields: [domain_id], references: [id], onDelete: Cascade)
+  concept                    Concept   @relation(fields: [concept_id], references: [id], onDelete: Cascade)
 
   @@index([user_id, domain_id])
 }
 
 model EvidenceEvent {
-  id                 String    @id @default(cuid())
-  user_id            String
-  domain_id          String
-  concept_id         String?
-  event_type         String
-  evidence_value     Float
-  confidence_rating  Int?
-  metadata           Json
-  created_at         DateTime  @default(now())
-  user               User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  domain             Domain    @relation(fields: [domain_id], references: [id], onDelete: Cascade)
-  concept            Concept?  @relation(fields: [concept_id], references: [id], onDelete: SetNull)
+  id                String   @id @default(cuid())
+  user_id           String
+  domain_id         String
+  concept_id        String?
+  event_type        String
+  evidence_value    Float
+  confidence_rating Int?
+  metadata          Json
+  created_at        DateTime @default(now())
+  user              User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  domain            Domain   @relation(fields: [domain_id], references: [id], onDelete: Cascade)
+  concept           Concept? @relation(fields: [concept_id], references: [id], onDelete: SetNull)
 
   @@index([user_id, domain_id])
   @@index([event_type])
 }
 
 model ExpertReview {
-  id                                    String   @id @default(cuid())
-  reviewer_user_id                      String
-  domain_id                             String
-  concept_id                            String
-  assessment_item_id                    String?
-  review_target_type                    String
-  review_target_id                      String
-  prompt                                String
-  response_text                         String
-  ai_score                              Float?
-  ai_misconception_labels               Json
-  expert_explanation_quality_score      Float?
-  expert_transfer_score                 Float?
-  expert_misconception_labels           Json
-  expert_confidence_calibration_score   Float?
-  notes                                 String?
-  blind_review                          Boolean  @default(true)
-  created_at                            DateTime @default(now())
-  reviewer                              User     @relation("ExpertReviewer", fields: [reviewer_user_id], references: [id], onDelete: Cascade)
-  domain                                Domain   @relation(fields: [domain_id], references: [id], onDelete: Cascade)
-  concept                               Concept  @relation(fields: [concept_id], references: [id], onDelete: Cascade)
-  assessmentItem                        AssessmentItem? @relation(fields: [assessment_item_id], references: [id], onDelete: SetNull)
+  id                                  String          @id @default(cuid())
+  reviewer_user_id                    String
+  domain_id                           String
+  concept_id                          String
+  assessment_item_id                  String?
+  review_target_type                  String
+  review_target_id                    String
+  prompt                              String
+  response_text                       String
+  ai_score                            Float?
+  ai_misconception_labels             Json
+  expert_explanation_quality_score    Float?
+  expert_transfer_score               Float?
+  expert_misconception_labels         Json
+  expert_confidence_calibration_score Float?
+  notes                               String?
+  blind_review                        Boolean         @default(true)
+  created_at                          DateTime        @default(now())
+  reviewer                            User            @relation("ExpertReviewer", fields: [reviewer_user_id], references: [id], onDelete: Cascade)
+  domain                              Domain          @relation(fields: [domain_id], references: [id], onDelete: Cascade)
+  concept                             Concept         @relation(fields: [concept_id], references: [id], onDelete: Cascade)
+  assessmentItem                      AssessmentItem? @relation(fields: [assessment_item_id], references: [id], onDelete: SetNull)
 
   @@unique([reviewer_user_id, review_target_type, review_target_id])
   @@index([domain_id])

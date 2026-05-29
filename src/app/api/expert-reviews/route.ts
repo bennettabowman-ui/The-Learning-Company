@@ -46,6 +46,15 @@ function probePrompt(result: unknown) {
   return "Delayed retention probe";
 }
 
+function shuffle<T>(items: T[]) {
+  const shuffled = [...items];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+  return shuffled;
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const domainId = searchParams.get("domainId");
@@ -68,19 +77,16 @@ export async function GET(request: Request) {
     prisma.learnerResponse.findMany({
       where: { assessmentItem: { domain_id: domainId } },
       include: { assessmentItem: { include: { concept: true } } },
-      orderBy: { created_at: "desc" },
-      take: 50
+      take: 250
     }),
     prisma.transferAttempt.findMany({
       where: { domain_id: domainId },
-      orderBy: { created_at: "desc" },
-      take: 50
+      take: 250
     }),
     prisma.retentionProbe.findMany({
       where: { domain_id: domainId, score: { not: null } },
       include: { concept: true },
-      orderBy: { completed_at: "desc" },
-      take: 50
+      take: 250
     }),
     prisma.assessmentItem.findMany({
       where: { domain_id: domainId },
@@ -91,7 +97,7 @@ export async function GET(request: Request) {
   const reviewedTargets = new Set(reviews.map((review) => `${review.review_target_type}:${review.review_target_id}`));
   const itemById = new Map(assessmentItems.map((item) => [item.id, item]));
 
-  const queue = [
+  const queue = shuffle([
     ...responses.map((response) => ({
       review_target_type: "learner_response",
       review_target_id: response.id,
@@ -137,10 +143,9 @@ export async function GET(request: Request) {
       ai_misconception_labels: [],
       created_at: probe.completed_at ?? probe.scheduled_at
     }))
-  ]
+  ])
     .filter((item) => item.concept_id)
     .filter((item) => !reviewedTargets.has(`${item.review_target_type}:${item.review_target_id}`))
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 25);
 
   return NextResponse.json({ queue, reviews });

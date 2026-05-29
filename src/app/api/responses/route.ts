@@ -53,7 +53,12 @@ export async function POST(request: Request) {
         response_time: data.response_time,
         ai_score: result.score,
         ai_feedback: result.feedback,
-        detected_misconceptions: result.detectedMisconceptions
+        detected_misconceptions: result.detectedMisconceptions,
+        scoring_provider: result.provider,
+        scoring_model: result.model,
+        scoring_error: result.providerError,
+        requires_expert_validation: result.requiresExpertValidation,
+        uncertainty_flags: result.uncertaintyFlags
       }
     });
 

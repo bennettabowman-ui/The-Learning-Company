@@ -55,7 +55,12 @@ export async function POST(request: Request) {
         score: result.score,
         rubric_feedback: result.feedback,
         transfer_distance: item.transfer_distance,
-        confidence_rating: data.confidence_rating
+        confidence_rating: data.confidence_rating,
+        scoring_provider: result.provider,
+        scoring_model: result.model,
+        scoring_error: result.providerError,
+        requires_expert_validation: result.requiresExpertValidation,
+        uncertainty_flags: result.uncertaintyFlags
       }
     });
 

@@ -50,6 +50,7 @@ export async function GET(request: Request) {
       "scoring_model",
       "requires_expert_validation",
       "uncertainty_flags",
+      "analysis_inclusion_status",
       "scoring_error",
       "metadata",
       "created_at"
@@ -67,6 +68,7 @@ export async function GET(request: Request) {
       response.scoring_model ?? "",
       response.requires_expert_validation,
       response.uncertainty_flags ?? "",
+      "eligible_proxy",
       response.scoring_error ?? "",
       response.detected_misconceptions,
       response.created_at.toISOString()
@@ -84,6 +86,7 @@ export async function GET(request: Request) {
       transfer.scoring_model ?? "",
       transfer.requires_expert_validation,
       transfer.uncertainty_flags ?? "",
+      "eligible_proxy",
       transfer.scoring_error ?? "",
       transfer.rubric_feedback,
       transfer.created_at.toISOString()
@@ -101,6 +104,7 @@ export async function GET(request: Request) {
       probe.scoring_model ?? "",
       probe.requires_expert_validation,
       probe.uncertainty_flags ?? "",
+      probe.simulated || probe.completed_early ? "excluded_simulated_or_early" : "eligible_primary_candidate",
       probe.scoring_error ?? "",
       probe.result,
       (probe.completed_at ?? probe.scheduled_at).toISOString()
@@ -120,6 +124,7 @@ export async function GET(request: Request) {
         metadata.scoring_model ?? "",
         metadata.requires_expert_validation ?? "",
         metadata.uncertainty_flags ?? "",
+        metadata.simulated || metadata.completed_early ? "excluded_simulated_or_early" : metadata.analysis_inclusion_status ?? "",
         metadata.provider_error ?? "",
         event.metadata,
         event.created_at.toISOString()
@@ -138,6 +143,7 @@ export async function GET(request: Request) {
       "",
       "",
       "",
+      "expert_primary",
       "",
       {
         ai_score: review.ai_score,

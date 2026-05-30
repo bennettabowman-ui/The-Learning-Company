@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "test": "tsx --test src/lib/research/outcomes.test.ts",
     "start": "next start",
     "lint": "eslint .",
     "prisma:generate": "prisma generate",

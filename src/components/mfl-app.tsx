@@ -136,6 +136,8 @@ type RetentionProbe = {
   score: number | null;
   confidence_rating: number | null;
   result: unknown;
+  simulated: boolean;
+  completed_early: boolean;
   concept: Concept;
 };
 
@@ -154,17 +156,26 @@ type Research = {
     user_id: string;
     name: string;
     condition: string;
-    diagnostic_score: number;
-    immediate_transfer_score: number;
-    delayed_retention_score: number;
+    diagnostic_score: number | null;
+    immediate_transfer_score: number | null;
+    delayed_retention_score: number | null;
+    ai_diagnostic_score: number | null;
+    ai_immediate_transfer_score: number | null;
+    ai_delayed_retention_score: number | null;
+    expert_review_count: number;
+    primary_outcome_source: string;
     high_confidence_errors: number;
   }>;
   conditions: Array<{
     condition: string;
     learner_count: number;
-    diagnostic_score: number;
-    immediate_transfer_score: number;
-    delayed_retention_score: number;
+    diagnostic_score: number | null;
+    immediate_transfer_score: number | null;
+    delayed_retention_score: number | null;
+    ai_diagnostic_score: number | null;
+    ai_immediate_transfer_score: number | null;
+    ai_delayed_retention_score: number | null;
+    expert_review_count: number;
     high_confidence_errors: number;
   }>;
   misconceptionFrequency: Array<{ name: string; count: number; avg_probability: number }>;
@@ -187,8 +198,6 @@ type ExpertQueueItem = {
   item_type: string;
   prompt: string;
   response_text: string;
-  ai_score?: number | null;
-  ai_misconception_labels: string[];
 };
 
 type CalibrationMetrics = {
@@ -427,7 +436,7 @@ function pct(value: number) {
 }
 
 function score(value: number | null | undefined) {
-  if (value === null || value === undefined) return "0.0";
+  if (value === null || value === undefined) return "n/a";
   return value.toFixed(1);
 }
 
@@ -1552,8 +1561,15 @@ function DiagnosticScreen({
       </section>
 
       <section className="panel">
-        <h2>Initial misconception map</h2>
-        <MisconceptionMap dashboard={dashboard} />
+        <h2>{user.experimental_condition === "CONTROL" ? "Standard path" : "Initial misconception map"}</h2>
+        {user.experimental_condition === "CONTROL" ? (
+          <div className="empty">
+            Diagnostic evidence is recorded for analysis. Control learners continue with standard explanation before
+            taking the same transfer challenge.
+          </div>
+        ) : (
+          <MisconceptionMap dashboard={dashboard} />
+        )}
       </section>
     </div>
   );
@@ -1602,6 +1618,7 @@ function RepairScreen({
 }) {
   const target = dashboard?.misconceptionStates.find((state) => state.status !== "REPAIRED") ?? null;
   const targetMisconception = target?.misconception ?? domain.misconceptions[0];
+  const isControl = user.experimental_condition === "CONTROL";
   const [stepIndex, setStepIndex] = useState(0);
   const [learnerResponse, setLearnerResponse] = useState("");
   const [confidence, setConfidence] = useState(3);
@@ -1634,6 +1651,13 @@ function RepairScreen({
     ],
     [targetMisconception]
   );
+  const standardExplanation = useMemo(
+    () =>
+      targetMisconception
+        ? `${targetMisconception.expert_correction} Use this as standard training material, then complete the same transfer challenge without misconception-targeted Socratic repair.`
+        : "Review the standard API authentication and permissions material, then complete the same transfer challenge.",
+    [targetMisconception]
+  );
   const [steps, setSteps] = useState<RepairStep[]>(fallbackSteps);
 
   useEffect(() => {
@@ -1642,7 +1666,8 @@ function RepairScreen({
     async function loadRepairSequence() {
       setSteps(fallbackSteps);
       setStepIndex(0);
-      setSequenceProvider("deterministic_fallback");
+      setSequenceProvider(isControl ? "standard_explanation" : "deterministic_fallback");
+      if (isControl) return;
       const params = new URLSearchParams({
         domainId: domain.id,
         userId: user.id
@@ -1669,7 +1694,7 @@ function RepairScreen({
     return () => {
       cancelled = true;
     };
-  }, [domain.id, fallbackSteps, targetMisconception?.id, user.id]);
+  }, [domain.id, fallbackSteps, isControl, targetMisconception?.id, user.id]);
 
   async function submit() {
     if (!targetMisconception) return;
@@ -1682,8 +1707,8 @@ function RepairScreen({
         domain_id: domain.id,
         concept_id: targetMisconception.concept_id,
         misconception_id: targetMisconception.id,
-        intervention_type: user.experimental_condition === "CONTROL" ? "standard_explanation" : "socratic_repair",
-        prompt_used: steps[stepIndex].prompt,
+        intervention_type: isControl ? "standard_explanation" : "socratic_repair",
+        prompt_used: isControl ? standardExplanation : steps[stepIndex].prompt,
         learner_response: learnerResponse,
         confidence_rating: confidence
       });
@@ -1692,15 +1717,17 @@ function RepairScreen({
         : result.result.provider ?? "deterministic_fallback";
       setFeedback(`Outcome ${score(result.result.score)}/5. ${result.result.feedback} Scoring: ${providerLabel}.`);
       setLearnerResponse("");
-      const nextIndex = Math.min(stepIndex + 1, steps.length - 1);
-      if (result.result.nextPrompt) {
-        setSteps((current) =>
-          current.map((step, index) =>
-            index === nextIndex ? { ...step, label: "Adaptive follow-up", prompt: result.result.nextPrompt! } : step
-          )
-        );
+      if (!isControl) {
+        const nextIndex = Math.min(stepIndex + 1, steps.length - 1);
+        if (result.result.nextPrompt) {
+          setSteps((current) =>
+            current.map((step, index) =>
+              index === nextIndex ? { ...step, label: "Adaptive follow-up", prompt: result.result.nextPrompt! } : step
+            )
+          );
+        }
+        setStepIndex(nextIndex);
       }
-      setStepIndex(nextIndex);
       await onRefresh();
     } finally {
       setBusy(false);
@@ -1710,50 +1737,65 @@ function RepairScreen({
   return (
     <div className="grid two">
       <section className="panel">
-        <h2>{user.experimental_condition === "CONTROL" ? "Standard explanation" : "Socratic repair sequence"}</h2>
+        <h2>{isControl ? "Standard explanation" : "Socratic repair sequence"}</h2>
         <p className="section-copy" style={{ marginBottom: 12 }}>
           Target: {targetMisconception?.name ?? "Complete a diagnostic first to identify a repair target."}
         </p>
-        <p className="brand-subtitle" style={{ marginBottom: 10 }}>
-          Repair sequence source: {sequenceProvider}
-        </p>
-        <div className="flow-steps">
-          {steps.slice(0, 9).map((step, index) => (
-            <button
-              key={step.label}
-              className={`flow-step ${index === stepIndex ? "active" : ""}`}
-              onClick={() => setStepIndex(index)}
-              type="button"
-            >
-              <strong>{step.label}</strong>
-              <p className="brand-subtitle">Step {index + 1}</p>
-            </button>
-          ))}
-        </div>
+        {!isControl ? (
+          <>
+            <p className="brand-subtitle" style={{ marginBottom: 10 }}>
+              Repair sequence source: {sequenceProvider}
+            </p>
+            <div className="flow-steps">
+              {steps.slice(0, 9).map((step, index) => (
+                <button
+                  key={step.label}
+                  className={`flow-step ${index === stepIndex ? "active" : ""}`}
+                  onClick={() => setStepIndex(index)}
+                  type="button"
+                >
+                  <strong>{step.label}</strong>
+                  <p className="brand-subtitle">Step {index + 1}</p>
+                </button>
+              ))}
+            </div>
+          </>
+        ) : null}
         <div className="panel compact" style={{ marginTop: 14 }}>
-          <span className="status blue">{steps[stepIndex].label}</span>
-          <p style={{ lineHeight: 1.5 }}>{steps[stepIndex].prompt}</p>
-          {user.experimental_condition === "CONTROL" ? (
+          <span className="status blue">{isControl ? "Standard training material" : steps[stepIndex].label}</span>
+          <p style={{ lineHeight: 1.5 }}>{isControl ? standardExplanation : steps[stepIndex].prompt}</p>
+          {isControl ? (
             <p className="brand-subtitle">
-              Control path records standard explanation exposure, then sends the learner to the same transfer challenge.
+              Control exposure is not scored as repair. The same immediate and delayed transfer outcomes are scored later.
             </p>
           ) : null}
         </div>
-        <TextArea label="Learner reasoning" value={learnerResponse} onChange={setLearnerResponse} />
+        <TextArea
+          label={isControl ? "Learner note after explanation" : "Learner reasoning"}
+          value={learnerResponse}
+          onChange={setLearnerResponse}
+        />
         <div className="field" style={{ marginTop: 10 }}>
-          <label>Confidence after repair step</label>
+          <label>{isControl ? "Confidence after explanation" : "Confidence after repair step"}</label>
           <ConfidenceControl value={confidence} onChange={setConfidence} />
         </div>
         <button className="button primary" style={{ marginTop: 12 }} onClick={submit} disabled={busy || !learnerResponse.trim()}>
           <Send size={15} />
-          Record repair evidence
+          {isControl ? "Record explanation exposure" : "Record repair evidence"}
         </button>
         {feedback ? <div className="feedback" style={{ marginTop: 12 }}>{feedback}</div> : null}
       </section>
 
       <section className="panel">
-        <h2>Repair priority</h2>
-        <MisconceptionMap dashboard={dashboard} />
+        <h2>{isControl ? "Control guardrail" : "Repair priority"}</h2>
+        {isControl ? (
+          <div className="empty">
+            This arm receives standard training material only. Misconception-targeted repair is withheld until after
+            transfer and retention outcomes are recorded.
+          </div>
+        ) : (
+          <MisconceptionMap dashboard={dashboard} />
+        )}
       </section>
     </div>
   );
@@ -1884,20 +1926,27 @@ function RetentionScreen({
     if (!selectedProbe) return;
     setBusy(true);
     try {
-      const result = await postJson<{ result: { feedback: string; score: number; provider?: string; model?: string } }>(
+      const result = await postJson<{
+        result: { feedback: string; score: number; provider?: string; model?: string; simulated?: boolean };
+      }>(
         "/api/retention-probes",
         {
-        user_id: user.id,
-        domain_id: domain.id,
-        probe_id: selectedProbe.id,
-        response_text: responseText,
-        confidence_rating: confidence
+          user_id: user.id,
+          domain_id: domain.id,
+          probe_id: selectedProbe.id,
+          response_text: responseText,
+          confidence_rating: confidence
         }
       );
       const providerLabel = result.result.model
         ? `${result.result.provider} · ${result.result.model}`
         : result.result.provider ?? "deterministic_fallback";
-      setFeedback(`Retention score ${score(result.result.score)}/5. ${result.result.feedback} Scoring: ${providerLabel}.`);
+      const exclusionNote = result.result.simulated
+        ? " This row is marked simulated/early and excluded from primary delayed-retention analysis."
+        : "";
+      setFeedback(
+        `Retention score ${score(result.result.score)}/5. ${result.result.feedback} Scoring: ${providerLabel}.${exclusionNote}`
+      );
       setResponseText("");
       await onRefresh();
     } finally {
@@ -1911,7 +1960,7 @@ function RetentionScreen({
         <h2>Delayed retention probe</h2>
         {probes.length === 0 ? (
           <div className="empty">
-            No delayed probes yet. Complete a transfer challenge or create a simulated 24-hour probe.
+            No delayed probes yet. Complete a transfer challenge or schedule a 24-hour probe for smoke testing.
           </div>
         ) : (
           <>
@@ -1945,7 +1994,7 @@ function RetentionScreen({
         )}
         <button className="button" style={{ marginTop: 12 }} onClick={createProbe} disabled={busy}>
           <Plus size={15} />
-          Simulate 24-hour probe
+          Schedule 24-hour probe
         </button>
         {feedback ? <div className="feedback" style={{ marginTop: 12 }}>{feedback}</div> : null}
       </section>
@@ -1958,6 +2007,7 @@ function RetentionScreen({
               <tr>
                 <th>Concept</th>
                 <th>Scheduled</th>
+                <th>Analysis status</th>
                 <th>Score</th>
                 <th>Confidence</th>
               </tr>
@@ -1967,6 +2017,7 @@ function RetentionScreen({
                 <tr key={probe.id}>
                   <td>{probe.concept.name}</td>
                   <td>{new Date(probe.scheduled_at).toLocaleString()}</td>
+                  <td>{probe.simulated || probe.completed_early ? "excluded: simulated/early" : "eligible"}</td>
                   <td>{probe.score === null ? "pending" : score(probe.score)}</td>
                   <td>{probe.confidence_rating ?? "pending"}</td>
                 </tr>
@@ -2135,8 +2186,6 @@ function ResearchScreen({
         review_target_id: selectedTarget.review_target_id,
         prompt: selectedTarget.prompt,
         response_text: selectedTarget.response_text,
-        ai_score: selectedTarget.ai_score ?? null,
-        ai_misconception_labels: selectedTarget.ai_misconception_labels,
         expert_explanation_quality_score: isTransferLike ? null : Number(expertForm.explanationScore),
         expert_transfer_score: isTransferLike ? Number(expertForm.transferScore) : null,
         expert_confidence_calibration_score: Number(expertForm.calibrationScore),
@@ -2295,15 +2344,14 @@ function ResearchScreen({
       <section className="panel">
         <h2>Condition comparison</h2>
         <div className="table-wrap">
-          <table>
+          <table className="compact-table">
             <thead>
               <tr>
                 <th>Condition</th>
                 <th>Learners</th>
-                <th>Diagnostic</th>
-                <th>Immediate transfer</th>
-                <th>Delayed retention</th>
-                <th>High-confidence errors</th>
+                <th>Expert delayed</th>
+                <th>AI delayed</th>
+                <th>Reviews</th>
               </tr>
             </thead>
             <tbody>
@@ -2311,10 +2359,9 @@ function ResearchScreen({
                 <tr key={row.condition}>
                   <td>{row.condition}</td>
                   <td>{row.learner_count}</td>
-                  <td>{score(row.diagnostic_score)}</td>
-                  <td>{score(row.immediate_transfer_score)}</td>
                   <td>{score(row.delayed_retention_score)}</td>
-                  <td>{row.high_confidence_errors}</td>
+                  <td>{score(row.ai_delayed_retention_score)}</td>
+                  <td>{row.expert_review_count}</td>
                 </tr>
               ))}
             </tbody>
@@ -2374,9 +2421,9 @@ function ResearchScreen({
               <tr>
                 <th>Learner</th>
                 <th>Condition</th>
-                <th>Diagnostic</th>
-                <th>Transfer</th>
-                <th>Delayed</th>
+                <th>Expert delayed</th>
+                <th>AI delayed</th>
+                <th>Reviews</th>
                 <th>High-confidence errors</th>
               </tr>
             </thead>
@@ -2385,9 +2432,9 @@ function ResearchScreen({
                 <tr key={row.user_id}>
                   <td>{row.name}</td>
                   <td>{row.condition}</td>
-                  <td>{score(row.diagnostic_score)}</td>
-                  <td>{score(row.immediate_transfer_score)}</td>
                   <td>{score(row.delayed_retention_score)}</td>
+                  <td>{score(row.ai_delayed_retention_score)}</td>
+                  <td>{row.expert_review_count}</td>
                   <td>{row.high_confidence_errors}</td>
                 </tr>
               ))}

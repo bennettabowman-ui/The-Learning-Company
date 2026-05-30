@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { expertOutcomeScore, isPrimaryRetentionCandidate, meanOrNull, meanOrZero } from "@/lib/research/outcomes";
 
-function avg(values: number[]) {
-  if (values.length === 0) return 0;
-  return Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2));
+function pushScore(map: Map<string, number[]>, userId: string | undefined, value: number | null) {
+  if (!userId || value === null) return;
+  const scores = map.get(userId) ?? [];
+  scores.push(value);
+  map.set(userId, scores);
+}
+
+function scoreCount(map: Map<string, number[]>, userId: string) {
+  return map.get(userId)?.length ?? 0;
 }
 
 export async function GET(request: Request) {
@@ -30,21 +37,53 @@ export async function GET(request: Request) {
     prisma.expertReview.findMany({ where: { domain_id: domainId } })
   ]);
 
+  const responseUserById = new Map(responses.map((response) => [response.id, response.user_id]));
+  const transferUserById = new Map(transfers.map((transfer) => [transfer.id, transfer.user_id]));
+  const probeUserById = new Map(
+    probes.filter((probe) => isPrimaryRetentionCandidate(probe)).map((probe) => [probe.id, probe.user_id])
+  );
+
+  const expertDiagnosticByUser = new Map<string, number[]>();
+  const expertTransferByUser = new Map<string, number[]>();
+  const expertRetentionByUser = new Map<string, number[]>();
+
+  for (const review of expertReviews) {
+    const value = expertOutcomeScore(review);
+    if (review.review_target_type === "learner_response") {
+      pushScore(expertDiagnosticByUser, responseUserById.get(review.review_target_id), value);
+    }
+    if (review.review_target_type === "transfer_attempt") {
+      pushScore(expertTransferByUser, transferUserById.get(review.review_target_id), value);
+    }
+    if (review.review_target_type === "retention_probe") {
+      pushScore(expertRetentionByUser, probeUserById.get(review.review_target_id), value);
+    }
+  }
+
   const byCondition = users.map((user) => {
     const userTransfers = transfers.filter((transfer) => transfer.user_id === user.id);
     const userResponses = responses.filter((response) => response.user_id === user.id);
-    const userProbes = probes.filter((probe) => probe.user_id === user.id && probe.score !== null);
+    const userProbes = probes.filter((probe) => probe.user_id === user.id && isPrimaryRetentionCandidate(probe));
     const highConfidenceErrors = userResponses.filter(
       (response) => response.confidence_rating >= 4 && response.ai_score < 3
     ).length;
+    const expertReviewCount =
+      scoreCount(expertDiagnosticByUser, user.id) +
+      scoreCount(expertTransferByUser, user.id) +
+      scoreCount(expertRetentionByUser, user.id);
 
     return {
       user_id: user.id,
       name: user.name,
       condition: user.experimental_condition,
-      diagnostic_score: avg(userResponses.map((response) => response.ai_score)),
-      immediate_transfer_score: avg(userTransfers.map((transfer) => transfer.score)),
-      delayed_retention_score: avg(userProbes.map((probe) => probe.score ?? 0)),
+      diagnostic_score: meanOrNull(expertDiagnosticByUser.get(user.id) ?? []),
+      immediate_transfer_score: meanOrNull(expertTransferByUser.get(user.id) ?? []),
+      delayed_retention_score: meanOrNull(expertRetentionByUser.get(user.id) ?? []),
+      ai_diagnostic_score: meanOrNull(userResponses.map((response) => response.ai_score)),
+      ai_immediate_transfer_score: meanOrNull(userTransfers.map((transfer) => transfer.score)),
+      ai_delayed_retention_score: meanOrNull(userProbes.map((probe) => probe.score)),
+      expert_review_count: expertReviewCount,
+      primary_outcome_source: expertReviewCount > 0 ? "expert_blind" : "unreviewed",
       high_confidence_errors: highConfidenceErrors
     };
   });
@@ -54,9 +93,13 @@ export async function GET(request: Request) {
     return {
       condition,
       learner_count: rows.length,
-      diagnostic_score: avg(rows.map((row) => row.diagnostic_score).filter(Boolean)),
-      immediate_transfer_score: avg(rows.map((row) => row.immediate_transfer_score).filter(Boolean)),
-      delayed_retention_score: avg(rows.map((row) => row.delayed_retention_score).filter(Boolean)),
+      diagnostic_score: meanOrNull(rows.map((row) => row.diagnostic_score)),
+      immediate_transfer_score: meanOrNull(rows.map((row) => row.immediate_transfer_score)),
+      delayed_retention_score: meanOrNull(rows.map((row) => row.delayed_retention_score)),
+      ai_diagnostic_score: meanOrNull(rows.map((row) => row.ai_diagnostic_score)),
+      ai_immediate_transfer_score: meanOrNull(rows.map((row) => row.ai_immediate_transfer_score)),
+      ai_delayed_retention_score: meanOrNull(rows.map((row) => row.ai_delayed_retention_score)),
+      expert_review_count: rows.reduce((sum, row) => sum + row.expert_review_count, 0),
       high_confidence_errors: rows.reduce((sum, row) => sum + row.high_confidence_errors, 0)
     };
   });
@@ -75,7 +118,7 @@ export async function GET(request: Request) {
   ).map((item) => ({
     name: item.name,
     count: item.count,
-    avg_probability: avg(item.avg_probability)
+    avg_probability: meanOrZero(item.avg_probability)
   }));
 
   return NextResponse.json({
@@ -88,7 +131,7 @@ export async function GET(request: Request) {
       retention_probes: probes.length,
       evidence_events: evidence.length,
       expert_reviews: expertReviews.length,
-      repair_success_rate: avg(
+      repair_success_rate: meanOrZero(
         misconceptionStates.map((state) => (state.status === "REPAIRED" ? 1 : 0))
       )
     }

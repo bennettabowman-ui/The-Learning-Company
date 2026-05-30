@@ -26,7 +26,6 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     overall: computeCalibrationMetrics(reviews),
-    byTargetType,
-    recentReviews: reviews.slice(0, 20)
+    byTargetType
   });
 }

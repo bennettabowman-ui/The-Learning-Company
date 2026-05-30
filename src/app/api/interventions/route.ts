@@ -21,14 +21,29 @@ export async function POST(request: Request) {
     prisma.concept.findUniqueOrThrow({ where: { id: data.concept_id } }),
     data.misconception_id ? prisma.misconception.findUnique({ where: { id: data.misconception_id } }) : null
   ]);
-  const result = await scoreRepairResponseWithAi({
-    domain,
-    concept,
-    misconception,
-    promptUsed: data.prompt_used,
-    learnerResponse: data.learner_response,
-    confidenceRating: data.confidence_rating
-  });
+  const isControl = data.intervention_type === "standard_explanation";
+  const result = isControl
+    ? {
+        score: 0,
+        feedback:
+          "Standard explanation exposure recorded. Primary evidence for the control arm comes from transfer and delayed retention outcomes.",
+        confidenceCalibration: 0,
+        postMisconceptionProbability: null,
+        nextPrompt: undefined,
+        provider: "not_scored",
+        model: undefined,
+        providerError: undefined,
+        uncertaintyFlags: ["control_exposure_not_scored"],
+        requiresExpertValidation: false
+      }
+    : await scoreRepairResponseWithAi({
+        domain,
+        concept,
+        misconception,
+        promptUsed: data.prompt_used,
+        learnerResponse: data.learner_response,
+        confidenceRating: data.confidence_rating
+      });
 
   const intervention = await prisma.$transaction(async (tx) => {
     const session = await tx.session.create({
@@ -54,7 +69,7 @@ export async function POST(request: Request) {
       }
     });
 
-    if (data.misconception_id) {
+    if (!isControl && data.misconception_id) {
       const existing = await tx.learnerMisconceptionState.findUnique({
         where: {
           user_id_domain_id_misconception_id: {
@@ -66,7 +81,9 @@ export async function POST(request: Request) {
       });
       const nextProbability = Math.max(0, (existing?.probability ?? 0.55) - (result.score >= 4 ? 0.35 : 0.15));
       const modelProbability =
-        result.provider === "openai" ? result.postMisconceptionProbability : Number(nextProbability.toFixed(2));
+        result.provider === "openai" && typeof result.postMisconceptionProbability === "number"
+          ? result.postMisconceptionProbability
+          : Number(nextProbability.toFixed(2));
 
       await tx.learnerMisconceptionState.upsert({
         where: {

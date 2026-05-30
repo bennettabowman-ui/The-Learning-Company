@@ -273,6 +273,8 @@ model RetentionProbe {
   score                      Float?
   confidence_rating          Int?
   result                     Json?
+  simulated                  Boolean   @default(false)
+  completed_early            Boolean   @default(false)
   scoring_provider           String?
   scoring_model              String?
   scoring_error              String?

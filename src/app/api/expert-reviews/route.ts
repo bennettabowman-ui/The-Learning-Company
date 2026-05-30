@@ -12,17 +12,19 @@ const postSchema = z
     review_target_id: z.string(),
     prompt: z.string().min(1),
     response_text: z.string().min(1),
-    ai_score: z.number().min(0).max(5).optional().nullable(),
-    ai_misconception_labels: z.array(z.string()).default([]),
     expert_explanation_quality_score: z.number().min(0).max(5).optional().nullable(),
     expert_transfer_score: z.number().min(0).max(5).optional().nullable(),
     expert_misconception_labels: z.array(z.string()).default([]),
     expert_confidence_calibration_score: z.number().min(0).max(5).optional().nullable(),
     notes: z.string().optional()
   })
-  .refine((value) => value.expert_explanation_quality_score !== undefined || value.expert_transfer_score !== undefined, {
+  .refine(
+    (value) =>
+      typeof value.expert_explanation_quality_score === "number" || typeof value.expert_transfer_score === "number",
+    {
     message: "At least one expert score is required"
-  });
+    }
+  );
 
 function jsonLabels(value: unknown) {
   if (!Array.isArray(value)) return [];
@@ -53,6 +55,42 @@ function shuffle<T>(items: T[]) {
     [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
   }
   return shuffled;
+}
+
+async function getAiJudgment(reviewTargetType: string, reviewTargetId: string) {
+  if (reviewTargetType === "learner_response") {
+    const response = await prisma.learnerResponse.findUnique({
+      where: { id: reviewTargetId },
+      select: { ai_score: true, detected_misconceptions: true }
+    });
+
+    return {
+      ai_score: response?.ai_score ?? null,
+      ai_misconception_labels: jsonLabels(response?.detected_misconceptions)
+    };
+  }
+
+  if (reviewTargetType === "transfer_attempt") {
+    const transfer = await prisma.transferAttempt.findUnique({
+      where: { id: reviewTargetId },
+      select: { score: true }
+    });
+
+    return {
+      ai_score: transfer?.score ?? null,
+      ai_misconception_labels: []
+    };
+  }
+
+  const probe = await prisma.retentionProbe.findUnique({
+    where: { id: reviewTargetId },
+    select: { score: true }
+  });
+
+  return {
+    ai_score: probe?.score ?? null,
+    ai_misconception_labels: []
+  };
 }
 
 export async function GET(request: Request) {
@@ -107,8 +145,6 @@ export async function GET(request: Request) {
       item_type: response.assessmentItem.item_type,
       prompt: response.assessmentItem.prompt,
       response_text: response.response_text,
-      ai_score: response.ai_score,
-      ai_misconception_labels: jsonLabels(response.detected_misconceptions),
       created_at: response.created_at
     })),
     ...transfers.map((transfer) => {
@@ -122,8 +158,6 @@ export async function GET(request: Request) {
         item_type: "transfer",
         prompt: item?.prompt ?? "Transfer scenario",
         response_text: transfer.response_text,
-        ai_score: transfer.score,
-        ai_misconception_labels: [],
         created_at: transfer.created_at
       };
     }),
@@ -139,8 +173,6 @@ export async function GET(request: Request) {
         typeof probe.result === "object" && probe.result !== null && "response_text" in probe.result
           ? String((probe.result as { response_text?: unknown }).response_text ?? "")
           : "",
-      ai_score: probe.score,
-      ai_misconception_labels: [],
       created_at: probe.completed_at ?? probe.scheduled_at
     }))
   ])
@@ -148,12 +180,13 @@ export async function GET(request: Request) {
     .filter((item) => !reviewedTargets.has(`${item.review_target_type}:${item.review_target_id}`))
     .slice(0, 25);
 
-  return NextResponse.json({ queue, reviews });
+  return NextResponse.json({ queue, reviewed_count: reviews.length });
 }
 
 export async function POST(request: Request) {
   const data = postSchema.parse(await request.json());
   const primaryScore = data.expert_transfer_score ?? data.expert_explanation_quality_score ?? 0;
+  const aiJudgment = await getAiJudgment(data.review_target_type, data.review_target_id);
 
   const review = await prisma.$transaction(async (tx) => {
     const created = await tx.expertReview.upsert({
@@ -166,7 +199,8 @@ export async function POST(request: Request) {
       },
       create: {
         ...data,
-        ai_score: data.ai_score ?? null,
+        ai_score: aiJudgment.ai_score,
+        ai_misconception_labels: aiJudgment.ai_misconception_labels,
         expert_explanation_quality_score: data.expert_explanation_quality_score ?? null,
         expert_transfer_score: data.expert_transfer_score ?? null,
         expert_confidence_calibration_score: data.expert_confidence_calibration_score ?? null,
@@ -176,8 +210,8 @@ export async function POST(request: Request) {
       update: {
         prompt: data.prompt,
         response_text: data.response_text,
-        ai_score: data.ai_score ?? null,
-        ai_misconception_labels: data.ai_misconception_labels,
+        ai_score: aiJudgment.ai_score,
+        ai_misconception_labels: aiJudgment.ai_misconception_labels,
         expert_explanation_quality_score: data.expert_explanation_quality_score ?? null,
         expert_transfer_score: data.expert_transfer_score ?? null,
         expert_misconception_labels: data.expert_misconception_labels,
@@ -199,7 +233,8 @@ export async function POST(request: Request) {
           expert_review_id: created.id,
           review_target_type: data.review_target_type,
           review_target_id: data.review_target_id,
-          ai_score: data.ai_score,
+          ai_score: aiJudgment.ai_score,
+          ai_misconception_labels: aiJudgment.ai_misconception_labels,
           expert_explanation_quality_score: data.expert_explanation_quality_score,
           expert_transfer_score: data.expert_transfer_score,
           expert_misconception_labels: data.expert_misconception_labels

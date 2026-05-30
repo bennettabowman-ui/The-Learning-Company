@@ -10,7 +10,8 @@ const schema = z.object({
   probe_id: z.string().optional(),
   delay_hours: z.coerce.number().optional(),
   response_text: z.string().optional(),
-  confidence_rating: z.coerce.number().min(1).max(5).optional()
+  confidence_rating: z.coerce.number().min(1).max(5).optional(),
+  simulate: z.boolean().optional().default(false)
 });
 
 export async function POST(request: Request) {
@@ -28,13 +29,18 @@ export async function POST(request: Request) {
       learnerResponse: data.response_text,
       confidenceRating: data.confidence_rating
     });
+    const completedAt = new Date();
+    const completedEarly = completedAt < probe.scheduled_at;
+    const simulated = data.simulate || completedEarly;
     const updated = await prisma.$transaction(async (tx) => {
       const completed = await tx.retentionProbe.update({
         where: { id: data.probe_id },
         data: {
-          completed_at: new Date(),
+          completed_at: completedAt,
           score: result.score,
           confidence_rating: data.confidence_rating,
+          simulated,
+          completed_early: completedEarly,
           scoring_provider: result.provider,
           scoring_model: result.model,
           scoring_error: result.providerError,
@@ -48,7 +54,11 @@ export async function POST(request: Request) {
             scoring_model: result.model,
             provider_error: result.providerError,
             uncertainty_flags: result.uncertaintyFlags,
-            requires_expert_validation: result.requiresExpertValidation
+            requires_expert_validation: result.requiresExpertValidation,
+            simulated,
+            completed_early: completedEarly,
+            scheduled_at: probe.scheduled_at.toISOString(),
+            completed_at: completedAt.toISOString()
           }
         }
       });
@@ -69,7 +79,11 @@ export async function POST(request: Request) {
             scoring_model: result.model,
             provider_error: result.providerError,
             uncertainty_flags: result.uncertaintyFlags,
-            requires_expert_validation: result.requiresExpertValidation
+            requires_expert_validation: result.requiresExpertValidation,
+            simulated,
+            completed_early: completedEarly,
+            scheduled_at: probe.scheduled_at.toISOString(),
+            completed_at: completedAt.toISOString()
           }
         }
       });
@@ -77,7 +91,7 @@ export async function POST(request: Request) {
       return completed;
     });
 
-    return NextResponse.json({ probe: updated, result });
+    return NextResponse.json({ probe: updated, result: { ...result, simulated, completed_early: completedEarly } });
   }
 
   if (!data.concept_id) {

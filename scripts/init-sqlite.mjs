@@ -203,6 +203,8 @@ CREATE TABLE IF NOT EXISTS "RetentionProbe" (
   "score" REAL,
   "confidence_rating" INTEGER,
   "result" JSONB,
+  "simulated" BOOLEAN NOT NULL DEFAULT false,
+  "completed_early" BOOLEAN NOT NULL DEFAULT false,
   "scoring_provider" TEXT,
   "scoring_model" TEXT,
   "scoring_error" TEXT,
@@ -290,6 +292,9 @@ for (const table of ["LearnerResponse", "TransferAttempt", "RetentionProbe"]) {
   addColumn(table, '"requires_expert_validation" BOOLEAN NOT NULL DEFAULT false');
   addColumn(table, '"uncertainty_flags" JSONB');
 }
+
+addColumn("RetentionProbe", '"simulated" BOOLEAN NOT NULL DEFAULT false');
+addColumn("RetentionProbe", '"completed_early" BOOLEAN NOT NULL DEFAULT false');
 
 db.close();
 console.log(`Initialized SQLite database at ${dbPath}`);
